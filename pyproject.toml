@@ -2,15 +2,21 @@
 name = "ClasPar"
 dynamic = ["version"]
 description = "ClasPar: the friendly classifier parser that parses, filters and writes classifier results to analysis tables."
-authors = [{name = "Jess Friedersdorff", email = "jess.friedersdorff@ukhsa.gov.uk"}]
+authors = [{ name = "Jess Friedersdorff", email = "jess.friedersdorff@ukhsa.gov.uk" }]
 requires-python = ">=3.12" # Developed in 3.14.2
-dependencies = ["pandas", "pyyaml"]
+dependencies = ["pandas", "pyyaml", "onyx-analysis-helper@git+https://github.com/ukhsa-collaboration/onyx-analysis-helper.git"]
 
 [tool.setuptools.dynamic]
-version = {attr = "claspar.__version__"} # Add underscore separated repo name here
+version = { attr = "claspar.__version__" } # Add underscore separated repo name here
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"claspar.lib" = ["*.yaml"]
 
 [project.optional-dependencies] # Dependencies for developers only - add more if required
-dev = ["ruff>=0.4.10,<0.5", "pytest", "pre-commit"] 
+dev = ["ruff>=0.4.10,<0.5", "pytest", "pre-commit"]
 
 [build-system] # Leave this section
 requires = ["setuptools"]
