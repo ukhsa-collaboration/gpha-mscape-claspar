@@ -27,6 +27,20 @@ def metadata_json():
 
 
 @pytest.fixture
+def kraken_thresholds_dict():
+    return {
+        "READ_THRESHOLD": 10,
+        "GENUS_RANK_THRESHOLD": 3,
+        "GENUS_READ_PCT_THRESHOLD": 20,
+    }
+
+
+@pytest.fixture
+def sylph_thresholds_dict():
+    return {"CONTAINMENT_INDEX_THRESHOLD": 0.2, "EFFECTIVE_COVERAGE_THRESHOLD": 1.0}
+
+
+@pytest.fixture
 def test_kraken_data(metadata_json):
     return pd.DataFrame(metadata_json["classifier_calls"])
 
@@ -78,12 +92,18 @@ def test__get_parent_taxonomy(taxonid, isbacteria, parent_id, parent_name):
     ],
 )
 def test__get_kraken_confidence_rating(
-    test, count_descendants, order_in_genus, pct_genus_reads, outcome
+    test,
+    count_descendants,
+    order_in_genus,
+    pct_genus_reads,
+    outcome,
+    kraken_thresholds_dict,
 ):
     actual = bacteria._get_kraken_confidence_rating(
         count_descendants=count_descendants,
         order_in_genus=order_in_genus,
         pct_genus_reads=pct_genus_reads,
+        kraken_thresholds_dict=kraken_thresholds_dict,
     )
     assert actual == outcome
     print(
@@ -92,8 +112,10 @@ def test__get_kraken_confidence_rating(
     )
 
 
-def test_process_kraken(test_kraken_data):
-    actual_species_df, actual_genus_df = bacteria.process_kraken(test_kraken_data, tp)
+def test_process_kraken(test_kraken_data, kraken_thresholds_dict):
+    actual_species_df, actual_genus_df = bacteria.process_kraken(
+        test_kraken_data, kraken_thresholds_dict, tp
+    )
     total_species = len(actual_species_df)
     assert total_species == 80
 
@@ -146,10 +168,12 @@ def test__process_sylph_rank(test_sylph_data):
     ],
 )
 def test__get_sylph_confidence_rating(
-    test, containment_index, effective_coverage, outcome
+    test, containment_index, effective_coverage, outcome, sylph_thresholds_dict
 ):
     actual_outcome = bacteria._get_sylph_confidence_rating(
-        containment_index=containment_index, effective_coverage=effective_coverage
+        containment_index=containment_index,
+        effective_coverage=effective_coverage,
+        sylph_thresholds_dict=sylph_thresholds_dict,
     )
 
     assert actual_outcome == outcome
@@ -159,8 +183,10 @@ def test__get_sylph_confidence_rating(
     )
 
 
-def test_process_sylph(test_sylph_data):
-    actual_sylph_result = bacteria.process_sylph(test_sylph_data, tp)
+def test_process_sylph(test_sylph_data, sylph_thresholds_dict):
+    actual_sylph_result = bacteria.process_sylph(
+        test_sylph_data, sylph_thresholds_dict, tp
+    )
     species_count = actual_sylph_result.loc[
         actual_sylph_result["taxon_rank"] == "species"
     ].shape[0]
