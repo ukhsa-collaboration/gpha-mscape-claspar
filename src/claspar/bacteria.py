@@ -9,20 +9,7 @@ import pandas as pd
 from epiweeks import Week
 from taxaplease import TaxaPlease
 
-#########
-# Setup #
-
-# Kraken filters
-READ_THRESHOLD: int = 10
-GENUS_RANK_THRESHOLD: int = 3
-GENUS_READ_PCT_THRESHOLD: int = 20
-
-# Sylph filters
-CONTAINMENT_INDEX_THRESHOLD: float = 0.2
-EFFECTIVE_COVERAGE_THRESHOLD: float = 1.0
-
-
-# Functions
+# from onyx_analysis_helper import onyx_analysis_helper_functions as oa
 
 
 # Kraken:
@@ -72,15 +59,15 @@ def _get_parent_taxonomy(
 
 
 def _get_kraken_confidence_rating(
-    *, count_descendants, order_in_genus, pct_genus_reads
+    *, count_descendants, order_in_genus, pct_genus_reads, kraken_thresholds_dict: dict
 ):
     """
     Apply the thresholds to determine the kraken confidence rating.
     """
     if (
-        count_descendants >= READ_THRESHOLD
-        and order_in_genus <= GENUS_RANK_THRESHOLD
-        and pct_genus_reads >= GENUS_READ_PCT_THRESHOLD
+        count_descendants >= kraken_thresholds_dict["READ_THRESHOLD"]
+        and order_in_genus <= kraken_thresholds_dict["GENUS_RANK_THRESHOLD"]
+        and pct_genus_reads >= kraken_thresholds_dict["GENUS_READ_PCT_THRESHOLD"]
     ):
         return "high"
     else:
@@ -88,7 +75,9 @@ def _get_kraken_confidence_rating(
 
 
 def process_kraken(
-    classifier_results: pd.DataFrame, taxaplease_instance: TaxaPlease = None
+    classifier_results: pd.DataFrame,
+    kraken_thresholds_dict: dict,
+    taxaplease_instance: TaxaPlease = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Process the kraken classifications. Returns two dataframes:
@@ -146,7 +135,12 @@ def process_kraken(
 
     # count number of species with >= 10 reads (READ_THRESHOLD value)
     filtered_species = (
-        species_df[(species_df["count_descendants"] >= READ_THRESHOLD)]
+        species_df[
+            (
+                species_df["count_descendants"]
+                >= kraken_thresholds_dict["READ_THRESHOLD"]
+            )
+        ]
         .groupby("genus_id")
         .size()
         .reset_index(name="filtered_species_identified")
@@ -182,7 +176,10 @@ def process_kraken(
 
     species_df["kraken_confidence"] = species_df.apply(
         lambda row: _get_kraken_confidence_rating(
-            row["count_descendants"], row["order_in_genus"], row["pct_genus_reads"]
+            count_descendants=row["count_descendants"],
+            order_in_genus=row["order_in_genus"],
+            pct_genus_reads=row["pct_genus_reads"],
+            kraken_thresholds_dict=kraken_thresholds_dict,
         ),
         axis=1,
     )
@@ -211,14 +208,14 @@ def _process_sylph_rank(row: pd.Series) -> tuple[int | None, str | None]:
 
 
 def _get_sylph_confidence_rating(
-    *, containment_index: float, effective_coverage: float
+    *, containment_index: float, effective_coverage: float, sylph_thresholds_dict: dict
 ) -> str:
     """
     Get the confidence rating for sylph results using thresholds.
     """
     if (
-        containment_index >= CONTAINMENT_INDEX_THRESHOLD
-        and effective_coverage >= EFFECTIVE_COVERAGE_THRESHOLD
+        containment_index >= sylph_thresholds_dict["CONTAINMENT_INDEX_THRESHOLD"]
+        and effective_coverage >= sylph_thresholds_dict["EFFECTIVE_COVERAGE_THRESHOLD"]
     ):
         return "high"
     else:
@@ -226,11 +223,16 @@ def _get_sylph_confidence_rating(
 
 
 def process_sylph(
-    sylph_out: pd.DataFrame, taxaplease_instance: TaxaPlease = None
+    sylph_out: pd.DataFrame,
+    sylph_thresholds_dict: dict,
+    taxaplease_instance: TaxaPlease = None,
 ) -> pd.DataFrame:
     """
     Process the sylph outputs and apply filters. Normalise to species level (sylph uses reference genomes which could be
     species or strain level), and add a confidence rating using the filters.
+    :param sylph_out: the sylph outputs (straight from scylla).
+    :param sylph_thresholds_dict: dictionary of the sylph filtering thresholds.
+    :param taxaplease_instance: instance of taxaplease.Default is none, in which case an instance will be created.
     """
 
     tp = taxaplease_instance if taxaplease_instance else TaxaPlease()
@@ -253,7 +255,109 @@ def process_sylph(
         lambda row: _get_sylph_confidence_rating(
             containment_index=row["cont_ind_eval"],
             effective_coverage=row["effective_coverage"],
+            sylph_thresholds_dict=sylph_thresholds_dict,
         ),
         axis=1,
     )
     return sylph_out
+
+
+def get_sylph_results(
+    sample_id: str,
+    original_sylph_results: pd.DataFrame,
+    sylph_thresholds_dict: dict,
+    taxaplease_instance: TaxaPlease = None,
+):
+    """
+    Get the headline result and the results from Sylph.
+    :param sample_id:
+    :param original_sylph_results:
+    :param sylph_thresholds_dict:
+    :param taxaplease_instance:
+    :return: tuple of dataframes; headline_result, result.
+    """
+    tp = taxaplease_instance if taxaplease_instance else TaxaPlease()
+    sylph_processed_df = process_sylph(
+        original_sylph_results, sylph_thresholds_dict, tp
+    )
+    high_confidence_species = sylph_processed_df.loc[
+        sylph_processed_df["sylph_confidence"] == "high"
+    ]
+    headline_result = (
+        f"Sample {sample_id} has {high_confidence_species.shape[0]} high confidence bacterial "
+        f"(and archaeal) species classified by Sylph."
+    )
+
+    results = high_confidence_species[["human_readable", "taxon_id", "taxon_rank"]]
+
+    return headline_result, results
+
+
+###################
+# Analysis tables #
+
+
+# def create_bacterial_analysis_fields(
+#     classifier: str,
+#     record_id: str,
+#     thresholds: dict,
+#     headline_result: str,
+#     results: dict,
+#     server: str,
+# ) -> dict:
+#     """Set up fields dictionary used to populate analysis table containing
+#     QC metrics.
+#     Arguments:
+#         classifier -- the type of classifier being reported in the table (kraken or sylph)
+#         record_id -- Climb ID for sample
+#         thresholds -- Dictionary containing criteria used to filter
+#         headline_result -- Short description of main result
+#         results -- Dictionary containing results
+#         server -- Server code is running on, one of "mscape" or "synthscape"
+#     Returns:
+#         onyx_analysis -- Class containing required fields for input to onyx
+#                          analysis table
+#         exitcode -- Exit code for checks - will be 0 if all checks passed, 1 if any checks failed
+#     """
+#     onyx_analysis = oa.OnyxAnalysis()
+#     onyx_analysis.add_analysis_details(
+#         analysis_name="bacterial-classifier-parser",
+#         analysis_description=f"This is an analysis to parse and filter the bacterial classifications from {classifier}",
+#     )
+#     onyx_analysis.add_package_metadata(package_name="claspar")
+#     methods_fail = onyx_analysis.add_methods(methods_dict=thresholds)
+#     results_fail = onyx_analysis.add_results(
+#         top_result=headline_result, results_dict=results
+#     )
+#     onyx_analysis.add_server_records(sample_id=record_id, server_name=server)
+#     required_field_fail, attribute_fail = onyx_analysis.check_analysis_object(
+#         publish_analysis=False
+#     )
+#
+#     if any(  # noqa: SIM108
+#         [methods_fail, results_fail, required_field_fail, attribute_fail]
+#     ):  # noqa SIM108
+#         exitcode = 1
+#     else:
+#         exitcode = 0
+#
+#     return onyx_analysis, exitcode
+
+
+# def write_qc_results_to_json(
+#     qc_dict: dict, sample_id: str, results_dir: os.path
+# ) -> os.path:
+#     """Write qc results dictionary to json output file.
+#     Arguments:
+#         qc_dict -- Dictionary containing qc results
+#         sample_id -- Sample ID to use in file name
+#         results_dir -- Directory to save results to
+#     Returns:
+#         os.path of saved json file
+#     """
+#     result_file = Path(results_dir) / f"{sample_id}_qc_results.json"
+#
+#     with Path(result_file).open("w") as file:
+#         json.dump(qc_dict, file)
+#
+#     return result_file
