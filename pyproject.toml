@@ -1,13 +1,13 @@
 [project] # Update all fields in this section
-name = "project-name-here" 
-version = "0.1.0" 
-description = "Short description here"
-authors = [{name = "Author name", email = "email.address@example.com"}] 
-requires-python = ">=3.12" 
-dependencies = ["pandas", "pyyaml", "climb-onyx-client"] 
+name = "ClasPar"
+dynamic = ["version"]
+description = "ClasPar: the friendly classifier parser that parses, filters and writes classifier results to analysis tables."
+authors = [{name = "Jess Friedersdorff", email = "jess.friedersdorff@ukhsa.gov.uk"}]
+requires-python = ">=3.12" # Developed in 3.14.2
+dependencies = ["pandas", "pyyaml"]
 
 [tool.setuptools.dynamic]
-version = {attr = "project_name_here.__version__"} # Add underscore separated repo name here
+version = {attr = "claspar.__version__"} # Add underscore separated repo name here
 
 [project.optional-dependencies] # Dependencies for developers only - add more if required
 dev = ["ruff>=0.4.10,<0.5", "pytest", "pre-commit"] 
@@ -17,7 +17,7 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project.scripts] # Update with main repo script here
-qc_sample = "mscape_template.mscape_script:main"
+claspar = "claspar.main:main"
 
 [tool.ruff.lint] # Lint rules to follow - add or delete if required
 select = [
@@ -42,7 +42,7 @@ select = [
 ignore = ["E501"] # Lint rules to ignore - add or remove as required
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 
 [tool.ruff.format]
 quote-style = "double"
