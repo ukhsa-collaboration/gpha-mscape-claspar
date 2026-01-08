@@ -9,24 +9,32 @@ and example helper functions provided below. These can be amended as required.
 import argparse
 import logging
 import sys
+import yaml
+import os
+from pathlib import Path
+from importlib import resources
 
 import mscape_template.mscape_functions as mf  # noqa: F401
 
 
 # Arg parse setup
 def get_args():
-    """Get command line arguments. Arguments can be added or removed as
-    required. It is however recommended to keep the arguments below as
-    a minimum for development purposes."""
     parser = argparse.ArgumentParser(
-        prog="mscape script",
-        description="""Example script layout
-        for code that will be integrated into mscape. This can be used
-        as a template and amended as required.
-        """,
+        prog="claspar",
+        description="""ClasPar: the friendly classifier parser that parses, filters and writes classifier results to 
+        analysis tables.""",
     )
     parser.add_argument("--input", "-i", type=str, required=True, help="Sample ID")
-    parser.add_argument("--output", "-o", type=str, required=True, help="Folder to save results to")
+    parser.add_argument(
+        "--output", "-o", type=str, required=True, help="Folder to save results to"
+    )
+    parser.add_argument(
+        "--config",
+        "-c",
+        type=str,
+        required=False,
+        help="Path to yaml file with filtering thresholds",
+    )
     parser.add_argument(
         "--server",
         "-s",
@@ -44,6 +52,17 @@ def get_args():
     )
 
     return parser.parse_args()
+
+
+def read_config_file(config_file: str | os.PathLike) -> dict:
+    """
+    Read config file to get thresholds to filter each of the classifier results.
+    :param config_file: path to yaml file containing filter thresholds.
+    :returns: dict, nested dictionary of thresholds.
+    """
+    with Path(config_file).open("r") as file:
+        thresholds = yaml.safe_load(file)
+    return thresholds
 
 
 # Logger set up
@@ -66,14 +85,41 @@ def set_up_logger(stdout_file):
 
 # Main function
 def main():
-    "Main function description here"
+    """ """
+    # Main function description here
 
     # Retrieve command line arguments:
     args = get_args()  # noqa: F841
 
     # Set up log file:
-    log_file = "path/to/logfile/mscape-template_logfile.txt"
+    log_file = Path(args.output) / f"{args.input}_claspar_log.txt"
     set_up_logger(log_file)
+
+    # Set up thresholds:
+    threshold_dict = {}
+    # Use default filtering thresholds yaml file if custom file is not supplied
+    if not args.config:
+        config_path = resources.files("claspar.lib").joinpath("filter_thresholds.yaml")
+        logging.info(
+            f"No custom filtering thresholds yaml file specified, using default parameters from file: {config_path}"
+        )
+    else:
+        config_path = args.config
+        logging.info(
+            f"Reading filtering thresholds from custom yaml file provided: {args.config}"
+        )
+
+    # Read in filtering thresholds from yaml file
+    try:
+        threshold_dict = read_config_file(config_path)
+    except FileNotFoundError:
+        logging.error(
+            f"Specified filtering thresholds yaml file {config_path} not found, exiting program."
+        )
+        exitcode = 1
+        return exitcode
+
+    ### DO THE THING
 
     # Add in rest of code including logging messages:
     logging.info(
@@ -84,8 +130,6 @@ def main():
 
     # Write to logs if component finished successfully (or not):
     logging.info("mscape template code successfully completed")
-
-    return
 
 
 # Run
