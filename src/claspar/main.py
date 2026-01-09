@@ -13,6 +13,7 @@ import yaml
 import os
 from pathlib import Path
 from importlib import resources
+from claspar import setup, bacteria
 
 import mscape_template.mscape_functions as mf  # noqa: F401
 
@@ -54,17 +55,6 @@ def get_args():
     return parser.parse_args()
 
 
-def read_config_file(config_file: str | os.PathLike) -> dict:
-    """
-    Read config file to get thresholds to filter each of the classifier results.
-    :param config_file: path to yaml file containing filter thresholds.
-    :returns: dict, nested dictionary of thresholds.
-    """
-    with Path(config_file).open("r") as file:
-        thresholds = yaml.safe_load(file)
-    return thresholds
-
-
 # Logger set up
 def set_up_logger(stdout_file):
     """Example logger set up which can be amended as required. In this example,
@@ -87,6 +77,10 @@ def set_up_logger(stdout_file):
 def main():
     """ """
     # Main function description here
+
+    #########
+    # Setup #
+    #########
 
     # Retrieve command line arguments:
     args = get_args()  # noqa: F841
@@ -111,7 +105,12 @@ def main():
 
     # Read in filtering thresholds from yaml file
     try:
-        threshold_dict = read_config_file(config_path)
+        threshold_dict, exit_codes = setup.read_config_file(config_path)
+        # If any of the exit_codes are 1, then some filters were missing - need to exit.
+        # These are logged in the check_filters function:
+        if any(exit_codes):
+            exitcode = 1
+            return exitcode
     except FileNotFoundError:
         logging.error(
             f"Specified filtering thresholds yaml file {config_path} not found, exiting program."
@@ -119,7 +118,9 @@ def main():
         exitcode = 1
         return exitcode
 
-    ### DO THE THING
+    ####################
+    # The Actual Thing #
+    ####################
 
     # Add in rest of code including logging messages:
     logging.info(
