@@ -205,3 +205,21 @@ def test_process_sylph(test_sylph_data, sylph_thresholds_dict):
         f"species, and {high_confidence_sylph} had a high confidence. There were {count_of_rows_with_genus_ids} "
         f"classifications with a genus ID (all as expected)."
     )
+
+
+def test_get_sylph_results(test_sylph_data, sylph_thresholds_dict):
+    headline, main_result, full_result_dfs_list = bacteria.get_sylph_results(
+        "ID-123456", test_sylph_data, sylph_thresholds_dict, tp
+    )
+    assert (
+        headline
+        == "Sample ID-123456 has 3 high confidence bacterial (and archaeal) species classified by Sylph."
+    )
+    assert main_result.shape == (3, 3)  # 3 rows of 3 columns
+    assert full_result_dfs_list[0].shape == (
+        3,
+        22,
+    )  # full dataframe to be published has 22 columns
+    print(
+        f"\nTest Sylph headline results: {headline} \nand the results:\n {main_result}"
+    )
