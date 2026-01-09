@@ -113,23 +113,17 @@ def test__get_kraken_confidence_rating(
 
 
 def test_process_kraken(test_kraken_data, kraken_thresholds_dict):
-    actual_species_df, actual_genus_df = bacteria.process_kraken(
-        test_kraken_data, kraken_thresholds_dict, tp
-    )
+    actual_species_df, actual_genus_df = bacteria.process_kraken(test_kraken_data, kraken_thresholds_dict, tp)
     total_species = len(actual_species_df)
     assert total_species == 80
 
-    high_confidence_species = actual_species_df.loc[
-        actual_species_df["kraken_confidence"] == "high"
-    ].shape[0]
+    high_confidence_species = actual_species_df.loc[actual_species_df["kraken_confidence"] == "high"].shape[0]
     assert high_confidence_species == 6
 
     total_genera = len(actual_genus_df)
     assert total_genera == 56
 
-    genera_with_more_than_one_species = actual_genus_df.loc[
-        actual_genus_df["total_species_identified"] > 1
-    ].shape[0]
+    genera_with_more_than_one_species = actual_genus_df.loc[actual_genus_df["total_species_identified"] > 1].shape[0]
     assert genera_with_more_than_one_species == 14
 
     print(
@@ -137,6 +131,17 @@ def test_process_kraken(test_kraken_data, kraken_thresholds_dict):
         f"{high_confidence_species} were high confidence. There were {total_genera} total genera, of which "
         f"{genera_with_more_than_one_species} had more than one species in it. (All as expected)"
     )
+
+
+def test_get_kraken_results(test_kraken_data, kraken_thresholds_dict):
+    headline_result, main_result, all_results = bacteria.get_kraken_results(
+        "ID-123456", test_kraken_data, kraken_thresholds_dict, tp
+    )
+    assert headline_result == "Sample ID-123456 has 6 high confidence bacterial species classified by Kraken."
+    assert len(main_result.keys()) == 6
+    assert all(len(row) == 3 for row in main_result.values())
+    assert len(all_results) == 2  # Expect two dataframes
+    assert len(all_results[1]) == 56  # 56 rows in the genus dataframe using test data.
 
 
 def test__process_sylph_rank(test_sylph_data):
@@ -148,13 +153,9 @@ def test__process_sylph_rank(test_sylph_data):
         ],
     )
     print(expected_new_columns)
-    test_sylph_data["taxon_rank"] = test_sylph_data["taxon_id"].apply(
-        lambda x: tp.get_record(x)["rank"]
-    )
+    test_sylph_data["taxon_rank"] = test_sylph_data["taxon_id"].apply(lambda x: tp.get_record(x)["rank"])
     assert all(test_sylph_data["taxon_rank"] == "species")
-    actual_new_columns = test_sylph_data.apply(
-        lambda x: bacteria._process_sylph_rank(x), axis=1, result_type="expand"
-    )
+    actual_new_columns = test_sylph_data.apply(lambda x: bacteria._process_sylph_rank(x), axis=1, result_type="expand")
     assert actual_new_columns.equals(expected_new_columns)
 
 
@@ -167,9 +168,7 @@ def test__process_sylph_rank(test_sylph_data):
         ("low containment, low coverage", 0.1, 0.04, "low"),
     ],
 )
-def test__get_sylph_confidence_rating(
-    test, containment_index, effective_coverage, outcome, sylph_thresholds_dict
-):
+def test__get_sylph_confidence_rating(test, containment_index, effective_coverage, outcome, sylph_thresholds_dict):
     actual_outcome = bacteria._get_sylph_confidence_rating(
         containment_index=containment_index,
         effective_coverage=effective_coverage,
@@ -184,20 +183,12 @@ def test__get_sylph_confidence_rating(
 
 
 def test_process_sylph(test_sylph_data, sylph_thresholds_dict):
-    actual_sylph_result = bacteria.process_sylph(
-        test_sylph_data, sylph_thresholds_dict, tp
-    )
-    species_count = actual_sylph_result.loc[
-        actual_sylph_result["taxon_rank"] == "species"
-    ].shape[0]
+    actual_sylph_result = bacteria.process_sylph(test_sylph_data, sylph_thresholds_dict, tp)
+    species_count = actual_sylph_result.loc[actual_sylph_result["taxon_rank"] == "species"].shape[0]
     assert species_count == 3
-    high_confidence_sylph = actual_sylph_result.loc[
-        actual_sylph_result["sylph_confidence"] == "high"
-    ].shape[0]
+    high_confidence_sylph = actual_sylph_result.loc[actual_sylph_result["sylph_confidence"] == "high"].shape[0]
     assert high_confidence_sylph == 3
-    count_of_rows_with_genus_ids = actual_sylph_result.loc[
-        actual_sylph_result["genus_id"].notnull()
-    ].shape[0]
+    count_of_rows_with_genus_ids = actual_sylph_result.loc[actual_sylph_result["genus_id"].notnull()].shape[0]
     # Genus ID is null if there is no genus for the species, for example if it's unclassified.
     assert count_of_rows_with_genus_ids == 2
     print(
@@ -211,15 +202,11 @@ def test_get_sylph_results(test_sylph_data, sylph_thresholds_dict):
     headline, main_result, full_result_dfs_list = bacteria.get_sylph_results(
         "ID-123456", test_sylph_data, sylph_thresholds_dict, tp
     )
-    assert (
-        headline
-        == "Sample ID-123456 has 3 high confidence bacterial (and archaeal) species classified by Sylph."
-    )
-    assert main_result.shape == (3, 3)  # 3 rows of 3 columns
-    assert full_result_dfs_list[0].shape == (
-        3,
-        22,
-    )  # full dataframe to be published has 22 columns
+    assert headline == "Sample ID-123456 has 3 high confidence bacterial (and archaeal) species classified by Sylph."
+    assert len(main_result.keys()) == 3
+    assert (len(row) == 3 for row in main_result.values())  # 3 rows of 3 columns
+    assert full_result_dfs_list[0].shape == (3, 22)
+    # full dataframe to be published has 22 columns
     print(
         f"\nTest Sylph headline results: {headline} \nand the results:\n {main_result}"
     )
