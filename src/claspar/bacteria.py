@@ -9,10 +9,7 @@ import pandas as pd
 from epiweeks import Week
 from taxaplease import TaxaPlease
 
-# from onyx_analysis_helper import onyx_analysis_helper_functions as oa
 
-
-# Kraken:
 def _process_collection_date(metadata: pd.DataFrame) -> pd.DataFrame:
     """
     Handle dates in metadata dataframe. If the collection_date column is null, it is replaced with the received_date.
@@ -20,22 +17,19 @@ def _process_collection_date(metadata: pd.DataFrame) -> pd.DataFrame:
     metadata["collection_date"] = pd.to_datetime(metadata["collection_date"])
     metadata["collection_date_merged"] = metadata["collection_date"]
     metadata["received_date"] = pd.to_datetime(metadata["received_date"])
-    metadata.loc[
-        (metadata["collection_date_merged"].isnull()), "collection_date_merged"
-    ] = metadata.loc[(metadata["collection_date_merged"].isnull()), "received_date"]
-    metadata["collection_date_month"] = metadata["collection_date_merged"].dt.strftime(
-        "%Y-%b"
-    )
-    metadata["collection_date_epi_week"] = metadata.collection_date_merged.apply(
-        Week.fromdate
-    ).astype(str)
+    metadata.loc[(metadata["collection_date_merged"].isnull()), "collection_date_merged"] = metadata.loc[
+        (metadata["collection_date_merged"].isnull()), "received_date"
+    ]
+    metadata["collection_date_month"] = metadata["collection_date_merged"].dt.strftime("%Y-%b")
+    metadata["collection_date_epi_week"] = metadata.collection_date_merged.apply(Week.fromdate).astype(str)
 
     return metadata
 
 
-def _get_parent_taxonomy(
-    taxon_id: int, taxaplease_instance: TaxaPlease = None
-) -> tuple[bool, dict | None, str | None]:
+##########
+# Kraken #
+##########
+def _get_parent_taxonomy(taxon_id: int, taxaplease_instance: TaxaPlease = None) -> tuple[bool, dict | None, str | None]:
     """
     Use taxaplease to get 'is bacteria', 'parent record' and 'parent human-readable'.
 
@@ -58,9 +52,7 @@ def _get_parent_taxonomy(
         return is_bacteria, parent_record, parent_human_readable
 
 
-def _get_kraken_confidence_rating(
-    *, count_descendants, order_in_genus, pct_genus_reads, kraken_thresholds_dict: dict
-):
+def _get_kraken_confidence_rating(*, count_descendants, order_in_genus, pct_genus_reads, kraken_thresholds_dict: dict):
     """
     Apply the thresholds to determine the kraken confidence rating.
     """
@@ -98,22 +90,16 @@ def process_kraken(
 
     classifier_results = classifier_results.copy()  # Don't edit the original dataframe
     # Add parent taxonomy info
-    classifier_results[["is_bacteria", "parent_record", "parent_human_readable"]] = (
-        classifier_results.apply(
-            lambda row: _get_parent_taxonomy(row["taxon_id"], tp),
-            axis=1,
-            result_type="expand",
-        )
+    classifier_results[["is_bacteria", "parent_record", "parent_human_readable"]] = classifier_results.apply(
+        lambda row: _get_parent_taxonomy(row["taxon_id"], tp),
+        axis=1,
+        result_type="expand",
     )
 
     # Get all genus level rows
-    genus_df = classifier_results[
-        (classifier_results["raw_rank"] == "G") & (classifier_results["is_bacteria"])
-    ].copy()
+    genus_df = classifier_results[(classifier_results["raw_rank"] == "G") & (classifier_results["is_bacteria"])].copy()
     # Calculate proportion of reads at the species level compared to genus level
-    genus_df["prop_species"] = 1 - (
-        genus_df["count_direct"] / genus_df["count_descendants"]
-    )
+    genus_df["prop_species"] = 1 - (genus_df["count_direct"] / genus_df["count_descendants"])
 
     # get all species level rows for bacterial taxa
     species_df = classifier_results[
@@ -122,25 +108,13 @@ def process_kraken(
     # add genus ID
     species_df["genus_id"] = species_df["taxon_id"].apply(tp.get_genus_taxid)
     # count number of species
-    total_species = (
-        species_df.groupby("genus_id")
-        .size()
-        .reset_index(name="total_species_identified")
-        .fillna(0)
-    )
+    total_species = species_df.groupby("genus_id").size().reset_index(name="total_species_identified").fillna(0)
 
-    genus_df = pd.merge(
-        genus_df, total_species, left_on="taxon_id", right_on="genus_id"
-    )
+    genus_df = pd.merge(genus_df, total_species, left_on="taxon_id", right_on="genus_id")
 
     # count number of species with >= 10 reads (READ_THRESHOLD value)
     filtered_species = (
-        species_df[
-            (
-                species_df["count_descendants"]
-                >= kraken_thresholds_dict["READ_THRESHOLD"]
-            )
-        ]
+        species_df[(species_df["count_descendants"] >= kraken_thresholds_dict["READ_THRESHOLD"])]
         .groupby("genus_id")
         .size()
         .reset_index(name="filtered_species_identified")
@@ -192,34 +166,32 @@ def get_kraken_results(
     original_kraken_results: pd.DataFrame,
     kraken_thresholds_dict: dict,
     taxaplease_instance: TaxaPlease = None,
-) -> tuple[str, pd.DataFrame, list[pd.DataFrame]]:
+) -> tuple[str, dict, list[pd.DataFrame]]:
     """
     Get the headline result and the results from Kraken for bacteria.
     :param sample_id: string of climb_id.
     :param original_kraken_results: pandas dataframe containing the original kraken results from Scylla.
     :param kraken_thresholds_dict: dictionary containing the filter thresholds for kraken classifications.
     :param taxaplease_instance: instance of taxaplease, default is none and in this case will create a new instance.
-    :return: tuple; headline_result (str), result (pandas dataframe), list of tables to write to csv (all pandas
+    :return: tuple; headline_result (str), result (dict), list of tables to write to csv (all pandas
     dataframes).
     """
     tp = taxaplease_instance if taxaplease_instance else TaxaPlease()
-    kraken_species, kraken_genus = process_kraken(
-        original_kraken_results, kraken_thresholds_dict, tp
-    )
-    high_confidence_species = kraken_species.loc[
-        kraken_species["kraken_confidence"] == "high"
-    ]
+    kraken_species, kraken_genus = process_kraken(original_kraken_results, kraken_thresholds_dict, tp)
+    high_confidence_species = kraken_species.loc[kraken_species["kraken_confidence"] == "high"].reset_index()
     headline_result = (
         f"Sample {sample_id} has {high_confidence_species.shape[0]} high confidence bacterial "
-        f"(and archaeal) species classified by Sylph."
+        f"species classified by Kraken."
     )
 
-    results = high_confidence_species[["human_readable", "taxon_id", "taxon_rank"]]
+    results = high_confidence_species[["human_readable", "taxon_id", "raw_rank"]].to_dict(orient="index")
 
     return headline_result, results, (kraken_species, kraken_genus)
 
 
-# Sylph:
+##########
+# Sylph: #
+##########
 def _process_sylph_rank(row: pd.Series) -> tuple[int | None, str | None]:
     """
     Get the species taxon ID and the species name from row, using taxaplease.
@@ -233,9 +205,7 @@ def _process_sylph_rank(row: pd.Series) -> tuple[int | None, str | None]:
         species = tp.get_record(tp.get_species_taxid(int(row["taxon_id"])))
         return species["taxid"], species["name"]
     else:
-        print(
-            f"Taxon ID returned rank other than species or strain: {row['taxon_id'], row['taxon_rank']}"
-        )
+        print(f"Taxon ID returned rank other than species or strain: {row['taxon_id'], row['taxon_rank']}")
         return None, None
 
 
@@ -269,9 +239,7 @@ def process_sylph(
 
     tp = taxaplease_instance if taxaplease_instance else TaxaPlease()
     # Get taxonomic rank of the sylph results
-    sylph_out["taxon_rank"] = sylph_out["taxon_id"].apply(
-        lambda x: tp.get_record(x)["rank"]
-    )
+    sylph_out["taxon_rank"] = sylph_out["taxon_id"].apply(lambda x: tp.get_record(x)["rank"])
 
     sylph_out[["species_id", "species_human_readable"]] = sylph_out.apply(
         lambda x: _process_sylph_rank(x), axis=1, result_type="expand"
@@ -299,97 +267,26 @@ def get_sylph_results(
     original_sylph_results: pd.DataFrame,
     sylph_thresholds_dict: dict,
     taxaplease_instance: TaxaPlease = None,
-) -> tuple[str, pd.DataFrame, list[pd.DataFrame]]:
+) -> tuple[str, dict, list[pd.DataFrame]]:
     """
     Get the headline result and the results from Sylph.
     :param sample_id: string of climb_id.
     :param original_sylph_results: pandas dataframe containing the original sylph results from Scylla.
     :param sylph_thresholds_dict: dictionary containing the filter thresholds for sylph classifications.
     :param taxaplease_instance: instance of taxaplease, default is none and in this case will create a new instance.
-    :return: tuple of dataframes; headline_result, result.
+    :return: tuple; headline_result (str), result (dict), list of tables to write to csv (all pandas
+    dataframes - in this case just one.).
     """
     tp = taxaplease_instance if taxaplease_instance else TaxaPlease()
-    sylph_processed_df = process_sylph(
-        original_sylph_results, sylph_thresholds_dict, tp
-    )
-    high_confidence_species = sylph_processed_df.loc[
-        sylph_processed_df["sylph_confidence"] == "high"
-    ]
+    sylph_processed_df = process_sylph(original_sylph_results, sylph_thresholds_dict, tp)
+    high_confidence_species = sylph_processed_df.loc[sylph_processed_df["sylph_confidence"] == "high"]
     headline_result = (
         f"Sample {sample_id} has {high_confidence_species.shape[0]} high confidence bacterial "
         f"(and archaeal) species classified by Sylph."
     )
 
-    results = high_confidence_species[["human_readable", "taxon_id", "taxon_rank"]]
+    results = high_confidence_species[
+        ["human_readable", "taxon_id", "taxon_rank"]
+    ].to_dict(orient="index")
 
     return headline_result, results, [sylph_processed_df]
-
-
-###################
-# Analysis tables #
-
-
-# def create_bacterial_analysis_fields(
-#     classifier: str,
-#     record_id: str,
-#     thresholds: dict,
-#     headline_result: str,
-#     results: dict,
-#     server: str,
-# ) -> dict:
-#     """Set up fields dictionary used to populate analysis table containing
-#     QC metrics.
-#     Arguments:
-#         classifier -- the type of classifier being reported in the table (kraken or sylph)
-#         record_id -- Climb ID for sample
-#         thresholds -- Dictionary containing criteria used to filter
-#         headline_result -- Short description of main result
-#         results -- Dictionary containing results
-#         server -- Server code is running on, one of "mscape" or "synthscape"
-#     Returns:
-#         onyx_analysis -- Class containing required fields for input to onyx
-#                          analysis table
-#         exitcode -- Exit code for checks - will be 0 if all checks passed, 1 if any checks failed
-#     """
-#     onyx_analysis = oa.OnyxAnalysis()
-#     onyx_analysis.add_analysis_details(
-#         analysis_name="bacterial-classifier-parser",
-#         analysis_description=f"This is an analysis to parse and filter the bacterial classifications from {classifier}",
-#     )
-#     onyx_analysis.add_package_metadata(package_name="claspar")
-#     methods_fail = onyx_analysis.add_methods(methods_dict=thresholds)
-#     results_fail = onyx_analysis.add_results(
-#         top_result=headline_result, results_dict=results
-#     )
-#     onyx_analysis.add_server_records(sample_id=record_id, server_name=server)
-#     required_field_fail, attribute_fail = onyx_analysis.check_analysis_object(
-#         publish_analysis=False
-#     )
-#
-#     if any(  # noqa: SIM108
-#         [methods_fail, results_fail, required_field_fail, attribute_fail]
-#     ):  # noqa SIM108
-#         exitcode = 1
-#     else:
-#         exitcode = 0
-#
-#     return onyx_analysis, exitcode
-
-
-# def write_qc_results_to_json(
-#     qc_dict: dict, sample_id: str, results_dir: os.path
-# ) -> os.path:
-#     """Write qc results dictionary to json output file.
-#     Arguments:
-#         qc_dict -- Dictionary containing qc results
-#         sample_id -- Sample ID to use in file name
-#         results_dir -- Directory to save results to
-#     Returns:
-#         os.path of saved json file
-#     """
-#     result_file = Path(results_dir) / f"{sample_id}_qc_results.json"
-#
-#     with Path(result_file).open("w") as file:
-#         json.dump(qc_dict, file)
-#
-#     return result_file
