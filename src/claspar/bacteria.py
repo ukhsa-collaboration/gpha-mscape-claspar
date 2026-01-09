@@ -187,6 +187,38 @@ def process_kraken(
     return species_df, genus_df
 
 
+def get_kraken_results(
+    sample_id: str,
+    original_kraken_results: pd.DataFrame,
+    kraken_thresholds_dict: dict,
+    taxaplease_instance: TaxaPlease = None,
+) -> tuple[str, pd.DataFrame, list[pd.DataFrame]]:
+    """
+    Get the headline result and the results from Kraken for bacteria.
+    :param sample_id: string of climb_id.
+    :param original_kraken_results: pandas dataframe containing the original kraken results from Scylla.
+    :param kraken_thresholds_dict: dictionary containing the filter thresholds for kraken classifications.
+    :param taxaplease_instance: instance of taxaplease, default is none and in this case will create a new instance.
+    :return: tuple; headline_result (str), result (pandas dataframe), list of tables to write to csv (all pandas
+    dataframes).
+    """
+    tp = taxaplease_instance if taxaplease_instance else TaxaPlease()
+    kraken_species, kraken_genus = process_kraken(
+        original_kraken_results, kraken_thresholds_dict, tp
+    )
+    high_confidence_species = kraken_species.loc[
+        kraken_species["kraken_confidence"] == "high"
+    ]
+    headline_result = (
+        f"Sample {sample_id} has {high_confidence_species.shape[0]} high confidence bacterial "
+        f"(and archaeal) species classified by Sylph."
+    )
+
+    results = high_confidence_species[["human_readable", "taxon_id", "taxon_rank"]]
+
+    return headline_result, results, (kraken_species, kraken_genus)
+
+
 # Sylph:
 def _process_sylph_rank(row: pd.Series) -> tuple[int | None, str | None]:
     """
@@ -267,13 +299,13 @@ def get_sylph_results(
     original_sylph_results: pd.DataFrame,
     sylph_thresholds_dict: dict,
     taxaplease_instance: TaxaPlease = None,
-):
+) -> tuple[str, pd.DataFrame, list[pd.DataFrame]]:
     """
     Get the headline result and the results from Sylph.
-    :param sample_id:
-    :param original_sylph_results:
-    :param sylph_thresholds_dict:
-    :param taxaplease_instance:
+    :param sample_id: string of climb_id.
+    :param original_sylph_results: pandas dataframe containing the original sylph results from Scylla.
+    :param sylph_thresholds_dict: dictionary containing the filter thresholds for sylph classifications.
+    :param taxaplease_instance: instance of taxaplease, default is none and in this case will create a new instance.
     :return: tuple of dataframes; headline_result, result.
     """
     tp = taxaplease_instance if taxaplease_instance else TaxaPlease()
@@ -290,7 +322,7 @@ def get_sylph_results(
 
     results = high_confidence_species[["human_readable", "taxon_id", "taxon_rank"]]
 
-    return headline_result, results
+    return headline_result, results, [sylph_processed_df]
 
 
 ###################
