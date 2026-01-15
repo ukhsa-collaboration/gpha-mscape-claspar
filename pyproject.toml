@@ -25,6 +25,9 @@ build-backend = "setuptools.build_meta"
 [project.scripts] # Update with main repo script here
 claspar = "claspar.main:main"
 
+[project.urls]
+Homepage = "https://github.com/ukhsa-collaboration/gpha-mscape-claspar"
+
 [tool.ruff.lint] # Lint rules to follow - add or delete if required
 select = [
     # pycodestyle
