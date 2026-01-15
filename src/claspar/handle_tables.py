@@ -1,3 +1,6 @@
+import os
+import pandas as pd
+from pathlib import Path
 from onyx_analysis_helper import onyx_analysis_helper_functions as oa
 
 ###################
@@ -30,17 +33,27 @@ def create_bacterial_analysis_fields(
                          analysis table
         exitcode -- Exit code for checks - will be 0 if all checks passed, 1 if any checks failed
     """
-    onyx_analysis = oa.OnyxAnalysis()
+    onyx_analysis = oa.OnyxAnalysis()  # set up class
+    # Add analysis details
     onyx_analysis.add_analysis_details(
         analysis_name=f"{domain}-classifier-parser",
         analysis_description=f"This is an analysis to parse and filter the {domain} classifications from {classifier}",
     )
+    # Add metadata about the pipeline/package
     onyx_analysis.add_package_metadata(package_name="claspar")
+    # Check that the methods were parsed by the class
     methods_fail = onyx_analysis.add_methods(methods_dict=thresholds)
-    results_fail = onyx_analysis.add_results(top_result=headline_result, results_dict=results)
+    # Check that the results were parsed by the class
+    results_fail = onyx_analysis.add_results(
+        top_result=headline_result, results_dict=results
+    )
+    # Add info about sample and server (mscape/synthscape)
     onyx_analysis.add_server_records(sample_id=record_id, server_name=server)
-    required_field_fail, attribute_fail = onyx_analysis.check_analysis_object(publish_analysis=False)
-
+    # Check the final object using the helper method
+    required_field_fail, attribute_fail = onyx_analysis.check_analysis_object(
+        publish_analysis=False
+    )
+    # If any fail, raise exit code.
     if any(  # noqa: SIM108
         [methods_fail, results_fail, required_field_fail, attribute_fail]
     ):  # noqa SIM108
@@ -51,20 +64,19 @@ def create_bacterial_analysis_fields(
     return onyx_analysis, exitcode
 
 
-# def write_qc_results_to_json(
-#     qc_dict: dict, sample_id: str, results_dir: os.path
-# ) -> os.path:
-#     """Write qc results dictionary to json output file.
-#     Arguments:
-#         qc_dict -- Dictionary containing qc results
-#         sample_id -- Sample ID to use in file name
-#         results_dir -- Directory to save results to
-#     Returns:
-#         os.path of saved json file
-#     """
-#     result_file = Path(results_dir) / f"{sample_id}_qc_results.json"
-#
-#     with Path(result_file).open("w") as file:
-#         json.dump(qc_dict, file)
-#
-#     return result_file
+def write_df_to_csv(
+    df: pd.DataFrame, sample_id: str, filename: str, results_dir: os.path
+) -> os.path:
+    """
+    Write results dataframe to csv.
+    :param df: dataframe of results to save
+    :param sample_id: Sample ID to use in file name
+    :param filename: str, unique name of file (will be joined to f"{sample_id}_{filename}.csv")
+    :param results_dir: Directory to save results to
+    :returns: os.path of saved csv file
+    """
+    result_file_path = Path(results_dir) / f"{sample_id}_{filename}.csv"
+
+    df.to_csv(result_file_path)
+
+    return result_file_path
