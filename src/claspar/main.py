@@ -122,6 +122,22 @@ def main():
     # The Actual Thing #
     ####################
 
+    ############
+    # Bacteria #
+    ############
+    # Kraken:
+    # write log
+    # get kraken results
+    # check exit code
+    # write main results dfs to file
+    # if args.no_onyx:
+    # exit cleanly
+    # add kraken analysis table to onyx
+    # check exit code
+    # if args.store_onyx - Use this option to do a test upload and check for errors before attempting an upload to onyx.
+    # then write the analysis tables to csv
+    # if args.test_onyx:
+
     # Add in rest of code including logging messages:
     logging.info(
         "mscape template code beginning"
