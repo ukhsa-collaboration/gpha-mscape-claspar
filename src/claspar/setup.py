@@ -17,7 +17,7 @@ def check_filters(filters: list[str], threshold_dict: dict) -> int:
     # First check for filters in the threshold dict compared to expected (extras)
     for f1 in threshold_dict:
         if f1 not in filters:
-            logging.info(f"Filter {f1} is not set to be used.")
+            logging.info(f"Filter '{f1}' is not set to be used.")
 
     # Second check for filters not in the threshold dict that are expected (missing)
     for f2 in filters:
@@ -47,7 +47,7 @@ def read_config_file(config_file: str | os.PathLike) -> tuple[dict, list]:
         "GENUS_READ_PCT_THRESHOLD",
     ]
     exit_codes.append(
-        check_filters(expected_kraken_filters, thresholds["kraken_filters"])
+        check_filters(expected_kraken_filters, thresholds["kraken_bacterial_filters"])
     )
 
     expected_sylph_filters = [
@@ -58,4 +58,16 @@ def read_config_file(config_file: str | os.PathLike) -> tuple[dict, list]:
         check_filters(expected_sylph_filters, thresholds["sylph_filters"])
     )
 
+    expected_viral_aligner_filters = [
+        "EVENNESS_VALUE",
+        "COVERAGE_1X",
+        "UNIQUELY_MAPPED_READS",
+        "MEAN_READ_IDENTITY",
+        "MEAN_ALIGNMENT_LENGTH",
+    ]
+    exit_codes.append(
+        check_filters(
+            expected_viral_aligner_filters, thresholds["viral_aligner_filters"]
+        )
+    )
     return thresholds, exit_codes
