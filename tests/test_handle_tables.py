@@ -17,7 +17,7 @@ def test_create_bacterial_analysis_fields():
         "result_metrics": '{"0": {"thing": 10, "type": "little"}, "1": {"thing": 10, "type": "big"}}',
         "mscape_records": ["ID_123456"],
     }
-    onyx_analysis_table, exitcode = handle_tables.create_bacterial_analysis_fields(
+    onyx_analysis_table, exitcode = handle_tables.create_analysis_fields(
         domain="bacteria",
         classifier="sylph",
         record_id="ID_123456",
