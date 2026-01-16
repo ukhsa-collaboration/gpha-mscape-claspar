@@ -1,22 +1,23 @@
 import os
-import pandas as pd
 from pathlib import Path
+
+import pandas as pd
 from onyx_analysis_helper import onyx_analysis_helper_functions as oa
 
 ###################
 # Analysis tables #
 
 
-def create_bacterial_analysis_fields(
+def create_analysis_fields(
     *,
     domain: str,
     classifier: str,
     record_id: str,
-    thresholds: dict,
+    thresholds: dict[str, int],
     headline_result: str,
     results: dict,
     server: str,
-) -> dict:
+) -> tuple[oa.OnyxAnalysis, int]:
     """
     Set up fields dictionary used to populate analysis table containing
     ClasPar outputs.
@@ -44,15 +45,11 @@ def create_bacterial_analysis_fields(
     # Check that the methods were parsed by the class
     methods_fail = onyx_analysis.add_methods(methods_dict=thresholds)
     # Check that the results were parsed by the class
-    results_fail = onyx_analysis.add_results(
-        top_result=headline_result, results_dict=results
-    )
+    results_fail = onyx_analysis.add_results(top_result=headline_result, results_dict=results)
     # Add info about sample and server (mscape/synthscape)
     onyx_analysis.add_server_records(sample_id=record_id, server_name=server)
     # Check the final object using the helper method
-    required_field_fail, attribute_fail = onyx_analysis.check_analysis_object(
-        publish_analysis=False
-    )
+    required_field_fail, attribute_fail = onyx_analysis.check_analysis_object(publish_analysis=False)
     # If any fail, raise exit code.
     if any(  # noqa: SIM108
         [methods_fail, results_fail, required_field_fail, attribute_fail]
@@ -64,9 +61,7 @@ def create_bacterial_analysis_fields(
     return onyx_analysis, exitcode
 
 
-def write_df_to_csv(
-    df: pd.DataFrame, sample_id: str, filename: str, results_dir: os.path
-) -> os.path:
+def write_df_to_csv(df: pd.DataFrame, sample_id: str, filename: str, results_dir: os.PathLike) -> os.PathLike:
     """
     Write results dataframe to csv.
     :param df: dataframe of results to save
