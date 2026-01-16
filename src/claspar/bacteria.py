@@ -4,6 +4,7 @@ Module containing functions needed to parse, filter and create bacteria classifi
 
 ###########
 # Imports #
+import logging
 
 import pandas as pd
 from epiweeks import Week
@@ -17,15 +18,11 @@ def _process_collection_date(metadata: pd.DataFrame) -> pd.DataFrame:
     metadata["collection_date"] = pd.to_datetime(metadata["collection_date"])
     metadata["collection_date_merged"] = metadata["collection_date"]
     metadata["received_date"] = pd.to_datetime(metadata["received_date"])
-    metadata.loc[
-        (metadata["collection_date_merged"].isnull()), "collection_date_merged"
-    ] = metadata.loc[(metadata["collection_date_merged"].isnull()), "received_date"]
-    metadata["collection_date_month"] = metadata["collection_date_merged"].dt.strftime(
-        "%Y-%b"
-    )
-    metadata["collection_date_epi_week"] = metadata.collection_date_merged.apply(
-        Week.fromdate
-    ).astype(str)
+    metadata.loc[(metadata["collection_date_merged"].isnull()), "collection_date_merged"] = metadata.loc[
+        (metadata["collection_date_merged"].isnull()), "received_date"
+    ]
+    metadata["collection_date_month"] = metadata["collection_date_merged"].dt.strftime("%Y-%b")
+    metadata["collection_date_epi_week"] = metadata.collection_date_merged.apply(Week.fromdate).astype(str)  # type: ignore
 
     return metadata
 
@@ -34,7 +31,7 @@ def _process_collection_date(metadata: pd.DataFrame) -> pd.DataFrame:
 # Kraken #
 ##########
 def _get_parent_taxonomy(
-    taxon_id: int, taxaplease_instance: TaxaPlease = None
+    taxon_id: int, taxaplease_instance: TaxaPlease | None = None
 ) -> tuple[bool, dict | None, str | None]:
     """
     Use taxaplease to get 'is bacteria', 'parent record' and 'parent human-readable'.
@@ -58,9 +55,7 @@ def _get_parent_taxonomy(
         return is_bacteria, parent_record, parent_human_readable
 
 
-def _get_kraken_confidence_rating(
-    *, count_descendants, order_in_genus, pct_genus_reads, kraken_thresholds_dict: dict
-):
+def _get_kraken_confidence_rating(*, count_descendants, order_in_genus, pct_genus_reads, kraken_thresholds_dict: dict):
     """
     Apply the thresholds to determine the kraken confidence rating.
     """
@@ -77,7 +72,7 @@ def _get_kraken_confidence_rating(
 def process_kraken(
     classifier_results: pd.DataFrame,
     kraken_thresholds_dict: dict,
-    taxaplease_instance: TaxaPlease = None,
+    taxaplease_instance: TaxaPlease | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Process the kraken classifications. Returns two dataframes:
@@ -98,22 +93,16 @@ def process_kraken(
 
     classifier_results = classifier_results.copy()  # Don't edit the original dataframe
     # Add parent taxonomy info
-    classifier_results[["is_bacteria", "parent_record", "parent_human_readable"]] = (
-        classifier_results.apply(
-            lambda row: _get_parent_taxonomy(row["taxon_id"], tp),
-            axis=1,
-            result_type="expand",
-        )
+    classifier_results[["is_bacteria", "parent_record", "parent_human_readable"]] = classifier_results.apply(
+        lambda row: _get_parent_taxonomy(row["taxon_id"], tp),
+        axis=1,
+        result_type="expand",
     )
 
     # Get all genus level rows
-    genus_df = classifier_results[
-        (classifier_results["raw_rank"] == "G") & (classifier_results["is_bacteria"])
-    ].copy()
+    genus_df = classifier_results[(classifier_results["raw_rank"] == "G") & (classifier_results["is_bacteria"])].copy()
     # Calculate proportion of reads at the species level compared to genus level
-    genus_df["prop_species"] = 1 - (
-        genus_df["count_direct"] / genus_df["count_descendants"]
-    )
+    genus_df["prop_species"] = 1 - (genus_df["count_direct"] / genus_df["count_descendants"])
 
     # get all species level rows for bacterial taxa
     species_df = classifier_results[
@@ -122,25 +111,13 @@ def process_kraken(
     # add genus ID
     species_df["genus_id"] = species_df["taxon_id"].apply(tp.get_genus_taxid)
     # count number of species
-    total_species = (
-        species_df.groupby("genus_id")
-        .size()
-        .reset_index(name="total_species_identified")
-        .fillna(0)
-    )
+    total_species = species_df.groupby("genus_id").size().reset_index(name="total_species_identified").fillna(0)
 
-    genus_df = pd.merge(
-        genus_df, total_species, left_on="taxon_id", right_on="genus_id"
-    )
+    genus_df = pd.merge(genus_df, total_species, left_on="taxon_id", right_on="genus_id")
 
     # count number of species with >= 10 reads (READ_THRESHOLD value)
     filtered_species = (
-        species_df[
-            (
-                species_df["count_descendants"]
-                >= kraken_thresholds_dict["READ_THRESHOLD"]
-            )
-        ]
+        species_df[(species_df["count_descendants"] >= kraken_thresholds_dict["READ_THRESHOLD"])]
         .groupby("genus_id")
         .size()
         .reset_index(name="filtered_species_identified")
@@ -191,7 +168,7 @@ def get_kraken_results(
     sample_id: str,
     original_kraken_results: pd.DataFrame,
     kraken_thresholds_dict: dict,
-    taxaplease_instance: TaxaPlease = None,
+    taxaplease_instance: TaxaPlease | None = None,
 ) -> tuple[str, dict, list[pd.DataFrame]]:
     """
     Get the headline result and the results from Kraken for bacteria.
@@ -203,43 +180,44 @@ def get_kraken_results(
     dataframes).
     """
     tp = taxaplease_instance if taxaplease_instance else TaxaPlease()
-    kraken_species, kraken_genus = process_kraken(
-        original_kraken_results, kraken_thresholds_dict, tp
-    )
-    high_confidence_species = kraken_species.loc[
-        kraken_species["kraken_confidence"] == "high"
-    ].reset_index()
+    kraken_species, kraken_genus = process_kraken(original_kraken_results, kraken_thresholds_dict, tp)
+    high_confidence_species = kraken_species.loc[kraken_species["kraken_confidence"] == "high"].reset_index()
     headline_result = (
         f"Sample {sample_id} has {high_confidence_species.shape[0]} high confidence bacterial "
         f"species classified by Kraken."
     )
 
-    results = high_confidence_species[
-        ["human_readable", "taxon_id", "raw_rank"]
-    ].to_dict(orient="index")
+    results = high_confidence_species[["human_readable", "taxon_id", "raw_rank"]].to_dict(orient="index")
 
-    return headline_result, results, (kraken_species, kraken_genus)
+    return headline_result, results, [kraken_species, kraken_genus]
 
 
 ##########
 # Sylph: #
 ##########
-def _process_sylph_rank(row: pd.Series) -> tuple[int | None, str | None]:
+def _process_sylph_rank(row: pd.Series, taxaplease_instance: TaxaPlease | None = None) -> tuple[int | None, str | None]:
     """
     Get the species taxon ID and the species name from row, using taxaplease.
     :params row: pd.series, row of a dataframe (used with an apply).
+    :params taxaplease_instance: TaxaPlease class instance (default is none, where TaxaPlease will be instantiated.)
     :return: list of two; taxon ID and human-readable species name, or [None, None] if rank is not species or strain.
     """
+    if row["taxon_id"] is None:
+        logging.error(f"Taxon id is not found for {row}")
+        return None, None
+
     if row["taxon_rank"] == "species":
         return row["taxon_id"], row["human_readable"]
     elif row["taxon_rank"] == "strain":
-        tp = TaxaPlease()
-        species = tp.get_record(tp.get_species_taxid(int(row["taxon_id"])))
-        return species["taxid"], species["name"]
+        tp = taxaplease_instance if taxaplease_instance else TaxaPlease()
+        taxon_id = int(row["taxon_id"])
+        species = tp.get_record(tp.get_species_taxid(taxon_id))  # type: ignore
+        if species:
+            return species["taxid"], species["name"]
+        else:
+            return None, None
     else:
-        print(
-            f"Taxon ID returned rank other than species or strain: {row['taxon_id'], row['taxon_rank']}"
-        )
+        print(f"Taxon ID returned rank other than species or strain: {row['taxon_id'], row['taxon_rank']}")
         return None, None
 
 
@@ -261,7 +239,7 @@ def _get_sylph_confidence_rating(
 def process_sylph(
     sylph_df: pd.DataFrame,
     sylph_thresholds_dict: dict,
-    taxaplease_instance: TaxaPlease = None,
+    taxaplease_instance: TaxaPlease | None = None,
 ) -> pd.DataFrame:
     """
     Process the sylph outputs and apply filters. Normalise to species level (sylph uses reference genomes which could be
@@ -273,9 +251,7 @@ def process_sylph(
 
     tp = taxaplease_instance if taxaplease_instance else TaxaPlease()
     # Get taxonomic rank of the sylph results
-    sylph_df["taxon_rank"] = sylph_df["taxon_id"].apply(
-        lambda x: tp.get_record(x)["rank"]
-    )
+    sylph_df["taxon_rank"] = sylph_df["taxon_id"].apply(lambda x: tp.get_record(x)["rank"])  # type: ignore
 
     sylph_df[["species_id", "species_human_readable"]] = sylph_df.apply(
         lambda x: _process_sylph_rank(x), axis=1, result_type="expand"
@@ -302,7 +278,7 @@ def get_sylph_results(
     sample_id: str,
     original_sylph_results: pd.DataFrame,
     sylph_thresholds_dict: dict,
-    taxaplease_instance: TaxaPlease = None,
+    taxaplease_instance: TaxaPlease | None = None,
 ) -> tuple[str, dict, list[pd.DataFrame]]:
     """
     Get the headline result and the results from Sylph.
@@ -314,19 +290,13 @@ def get_sylph_results(
     dataframes - in this case just one.).
     """
     tp = taxaplease_instance if taxaplease_instance else TaxaPlease()
-    sylph_processed_df = process_sylph(
-        original_sylph_results, sylph_thresholds_dict, tp
-    )
-    high_confidence_species = sylph_processed_df.loc[
-        sylph_processed_df["sylph_confidence"] == "high"
-    ]
+    sylph_processed_df = process_sylph(original_sylph_results, sylph_thresholds_dict, tp)
+    high_confidence_species = sylph_processed_df.loc[sylph_processed_df["sylph_confidence"] == "high"]
     headline_result = (
         f"Sample {sample_id} has {high_confidence_species.shape[0]} high confidence bacterial "
         f"(and archaeal) species classified by Sylph."
     )
 
-    results = high_confidence_species[
-        ["human_readable", "taxon_id", "taxon_rank"]
-    ].to_dict(orient="index")
+    results = high_confidence_species[["human_readable", "taxon_id", "taxon_rank"]].to_dict(orient="index")
 
     return headline_result, results, [sylph_processed_df]
