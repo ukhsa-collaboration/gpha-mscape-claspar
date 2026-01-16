@@ -4,11 +4,12 @@ tests should be run before and after any changes are made.
 """
 
 import json
+
 import pandas as pd
 import pytest  # noqa: F401
-from claspar import bacteria
 from taxaplease import TaxaPlease
 
+from claspar import bacteria
 
 pd.set_option("display.max_colwidth", None)
 pd.set_option("display.max_columns", None)
@@ -46,7 +47,7 @@ def test_kraken_data(metadata_json):
 
 
 @pytest.fixture
-def test_sylph_data(metadata_json):
+def sylph_test_data(metadata_json):
     return pd.DataFrame(metadata_json["sylph_results"])
 
 
@@ -59,9 +60,9 @@ def test_process_collection_date():
     df = pd.DataFrame(data)
     new_df = bacteria._process_collection_date(df)
     assert new_df.shape == (3, 6), "Actual dataframe does not have expected shape."
-    assert (
-        "collection_date_epi_week" in new_df.columns.values
-    ), "Actual dataframe does not contain collection_date_epi_week column."
+    assert "collection_date_epi_week" in new_df.columns.values, (
+        "Actual dataframe does not contain collection_date_epi_week column."
+    )
     print(f"Metadata with date handling looks like: {new_df}")
 
 
@@ -77,7 +78,7 @@ def test_process_collection_date():
 def test__get_parent_taxonomy(taxonid, isbacteria, parent_id, parent_name):
     actual = bacteria._get_parent_taxonomy(taxonid, tp)
     assert actual[0] == isbacteria
-    assert actual[1]["taxid"] == parent_id
+    assert actual[1]["taxid"] == parent_id  # type: ignore
     assert actual[2] == parent_name
     print(f"Parent taxonomy for {taxonid} is {actual}")
 
@@ -140,11 +141,20 @@ def test_get_kraken_results(test_kraken_data, kraken_thresholds_dict):
     assert headline_result == "Sample ID-123456 has 6 high confidence bacterial species classified by Kraken."
     assert len(main_result.keys()) == 6
     assert all(len(row) == 3 for row in main_result.values())
-    assert len(all_results) == 2  # Expect two dataframes
+    assert len(all_results) == 2  # Expect two dataframes in a list
     assert len(all_results[1]) == 56  # 56 rows in the genus dataframe using test data.
 
 
-def test__process_sylph_rank(test_sylph_data):
+@pytest.fixture
+def sylph_test_data_with_rank(sylph_test_data) -> pd.DataFrame:
+    sylph_test_data["taxon_rank"] = sylph_test_data["taxon_id"].apply(
+        lambda x: tp.get_record(x)["rank"]  # type: ignore
+    )
+    assert all(sylph_test_data["taxon_rank"] == "species")
+    return sylph_test_data
+
+
+def test__process_sylph_rank(sylph_test_data_with_rank):
     expected_new_columns = pd.DataFrame(
         [
             [1869212, "Chitinophagaceae bacterium"],
@@ -152,11 +162,38 @@ def test__process_sylph_rank(test_sylph_data):
             [2104, "Mycoplasmoides pneumoniae"],
         ],
     )
-    print(expected_new_columns)
-    test_sylph_data["taxon_rank"] = test_sylph_data["taxon_id"].apply(lambda x: tp.get_record(x)["rank"])
-    assert all(test_sylph_data["taxon_rank"] == "species")
-    actual_new_columns = test_sylph_data.apply(lambda x: bacteria._process_sylph_rank(x), axis=1, result_type="expand")
+
+    actual_new_columns = sylph_test_data_with_rank.apply(
+        lambda x: bacteria._process_sylph_rank(x), axis=1, result_type="expand"
+    )
     assert actual_new_columns.equals(expected_new_columns)
+    print(f"\nChecking the sylph rank to get ID and species name - get {actual_new_columns}")
+
+
+def test__process_sylph_rank_strain(sylph_test_data_with_rank):
+    test_df = pd.DataFrame(
+        {"taxon_id": [1121296], "human_readable": ["[Clostridium] aminophilum DSM 10710"], "taxon_rank": ["strain"]}
+    )
+    expected_new_columns = pd.DataFrame([[1526, "[Clostridium] aminophilum"]])
+
+    actual_new_columns = test_df.apply(lambda x: bacteria._process_sylph_rank(x), axis=1, result_type="expand")
+    assert actual_new_columns.equals(expected_new_columns)
+    print(
+        f"\nTaxa with strain rank will be given the species level ID and human readable:"
+        f"{test_df} would give {expected_new_columns}."
+    )
+
+
+def test__process_sylph_rank_no_id(sylph_test_data_with_rank):
+    test_df = pd.DataFrame({"taxon_id": [""], "human_readable": [""], "taxon_rank": [""]})
+    expected_new_columns = pd.DataFrame([[None, None]])
+
+    actual_new_columns = test_df.apply(lambda x: bacteria._process_sylph_rank(x), axis=1, result_type="expand")
+    assert actual_new_columns.equals(expected_new_columns)
+    print(
+        f"\nTaxa without a rank will be given the species level ID and human readable:"
+        f"{test_df} would give {expected_new_columns}."
+    )
 
 
 @pytest.mark.parametrize(
@@ -182,8 +219,8 @@ def test__get_sylph_confidence_rating(test, containment_index, effective_coverag
     )
 
 
-def test_process_sylph(test_sylph_data, sylph_thresholds_dict):
-    actual_sylph_result = bacteria.process_sylph(test_sylph_data, sylph_thresholds_dict, tp)
+def test_process_sylph(sylph_test_data, sylph_thresholds_dict):
+    actual_sylph_result = bacteria.process_sylph(sylph_test_data, sylph_thresholds_dict, tp)
     species_count = actual_sylph_result.loc[actual_sylph_result["taxon_rank"] == "species"].shape[0]
     assert species_count == 3
     high_confidence_sylph = actual_sylph_result.loc[actual_sylph_result["sylph_confidence"] == "high"].shape[0]
@@ -198,15 +235,13 @@ def test_process_sylph(test_sylph_data, sylph_thresholds_dict):
     )
 
 
-def test_get_sylph_results(test_sylph_data, sylph_thresholds_dict):
+def test_get_sylph_results(sylph_test_data, sylph_thresholds_dict):
     headline, main_result, full_result_dfs_list = bacteria.get_sylph_results(
-        "ID-123456", test_sylph_data, sylph_thresholds_dict, tp
+        "ID-123456", sylph_test_data, sylph_thresholds_dict, tp
     )
     assert headline == "Sample ID-123456 has 3 high confidence bacterial (and archaeal) species classified by Sylph."
     assert len(main_result.keys()) == 3
     assert (len(row) == 3 for row in main_result.values())  # 3 rows of 3 columns
     assert full_result_dfs_list[0].shape == (3, 22)
     # full dataframe to be published has 22 columns
-    print(
-        f"\nTest Sylph headline results: {headline} \nand the results:\n {main_result}"
-    )
+    print(f"\nTest Sylph headline results: {headline} \nand the results:\n {main_result}")
