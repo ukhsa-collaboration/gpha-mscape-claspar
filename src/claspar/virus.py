@@ -19,6 +19,18 @@ class VirusClasPar:
     get_virus_analysis_table - get the analysis table (returns instance of the onyx analysis helper class).
     save_outputs_to_csv - method to save the outputs (saved in instance attributes) to file (returns None)
 
+    Attributes:
+    exitcode - int; updated after init and get_virus_analysis_table.
+    data_input - pd.DataFrame; original viral aligner results from scylla.
+    thresholds - dict; the thresholds for filtering
+    sample_id - str; the climb-id
+    server - str; mscape or synthscape
+    filtered_data - pd.DataFrame; the viral aligner results after filtering
+    headline_results - str; the main result, automatically generated to include the final number of taxa that remained
+    after filtering
+    results - dict; the filtered dataframe as a dict.
+    analysis_table - oa.OnyxAnalysis; instance of the analysis table from the helper, containing all the relevant info.
+
     :param sample_id: str, climb-id
     :param original_viral_aligner_df: pandas dataframe, the original results from scylla.
     :param virus_thresholds_dict: dict, containing the thresholds to filter.
