@@ -9,13 +9,10 @@ and example helper functions provided below. These can be amended as required.
 import argparse
 import logging
 import sys
-import yaml
-import os
-from pathlib import Path
 from importlib import resources
-from claspar import setup, bacteria
+from pathlib import Path
 
-import mscape_template.mscape_functions as mf  # noqa: F401
+from claspar import bacteria, setup, virus
 
 
 # Arg parse setup
@@ -25,10 +22,8 @@ def get_args():
         description="""ClasPar: the friendly classifier parser that parses, filters and writes classifier results to 
         analysis tables.""",
     )
-    parser.add_argument("--input", "-i", type=str, required=True, help="Sample ID")
-    parser.add_argument(
-        "--output", "-o", type=str, required=True, help="Folder to save results to"
-    )
+    parser.add_argument("--sample_id", "-i", type=str, required=True, help="Sample ID")
+    parser.add_argument("--output_dir", "-o", type=str, required=True, help="directory to save results to.")
     parser.add_argument(
         "--config",
         "-c",
@@ -81,7 +76,7 @@ def main():
     #########
     # Setup #
     #########
-
+    main_exitcode = 0
     # Retrieve command line arguments:
     args = get_args()  # noqa: F841
 
@@ -93,30 +88,31 @@ def main():
     threshold_dict = {}
     # Use default filtering thresholds yaml file if custom file is not supplied
     if not args.config:
-        config_path = resources.files("claspar.lib").joinpath("filter_thresholds.yaml")
-        logging.info(
-            f"No custom filtering thresholds yaml file specified, using default parameters from file: {config_path}"
-        )
-    else:
-        config_path = args.config
-        logging.info(
-            f"Reading filtering thresholds from custom yaml file provided: {args.config}"
-        )
+        with resources.as_file(resources.files("claspar.lib").joinpath("filter_thresholds.yaml")) as config_file:
+            threshold_dict, exit_codes = setup.read_config_file(config_file)
 
-    # Read in filtering thresholds from yaml file
-    try:
-        threshold_dict, exit_codes = setup.read_config_file(config_path)
-        # If any of the exit_codes are 1, then some filters were missing - need to exit.
-        # These are logged in the check_filters function:
-        if any(exit_codes):
-            exitcode = 1
-            return exitcode
-    except FileNotFoundError:
-        logging.error(
-            f"Specified filtering thresholds yaml file {config_path} not found, exiting program."
-        )
-        exitcode = 1
-        return exitcode
+        logging.info("No custom filtering thresholds yaml file specified, using default parameters from included file.")
+    else:
+        logging.info("Reading filtering thresholds from custom yaml file provided: %s", args.config)
+
+        # Read in filtering thresholds from yaml file
+        try:
+            threshold_dict, config_exit_codes = setup.read_config_file(args.config)
+            # If any of the exit_codes are 1, then some filters were missing - need to exit.
+            # These are logged in the check_filters function:
+            # --> Exit if any issues with the config:
+            if any(config_exit_codes):
+                # logging happens in the function
+                main_exitcode = 1
+                return main_exitcode
+        # --> Exit if config file not found:
+        except FileNotFoundError:
+            logging.error("Specified filtering thresholds yaml file %s not found, exiting program.", args.config)
+            main_exitcode = 1
+            return main_exitcode
+
+    # Set up data needed (query Onyx once here)
+    viral_aligner_input_df, sylph_input_df, classifier_calls_df = setup.get_input_data(args.sample_id, args.server)
 
     ####################
     # The Actual Thing #
@@ -125,28 +121,51 @@ def main():
     ############
     # Bacteria #
     ############
-    # Kraken:
-    # write log
-    # get kraken results
-    # check exit code
-    # write main results dfs to file
-    # if args.no_onyx:
-    # exit cleanly
-    # add kraken analysis table to onyx
-    # check exit code
-    # if args.store_onyx - Use this option to do a test upload and check for errors before attempting an upload to onyx.
-    # then write the analysis tables to csv
-    # if args.test_onyx:
 
     # Add in rest of code including logging messages:
-    logging.info(
-        "mscape template code beginning"
-    )  # Example only - add more informative logging messages
+    logging.info("mscape template code beginning")  # Example only - add more informative logging messages
 
     # Additional code in here
 
     # Write to logs if component finished successfully (or not):
     logging.info("mscape template code successfully completed")
+
+    ###########
+    # Viruses #
+    ###########
+
+    # Add in rest of code including logging messages:
+    logging.info("Parsing the viral aligner classifications.")
+
+    viral_aligner = virus.VirusClasPar(
+        sample_id=args.sample_id,
+        original_viral_aligner_df=viral_aligner_input_df,
+        virus_thresholds_dict=threshold_dict["viral_aligner_filters"],
+        server=args.server,
+    )
+
+    viral_aligner_analysis_table = viral_aligner.get_virus_analysis_table()
+
+    # Check it's all going smoothly in there:
+    if viral_aligner.exitcode == 1:
+        main_exitcode = 1
+        return main_exitcode
+
+    # All good so far, let's write analysis table to json:
+    viral_aligner_json_path = Path(args.output) / f"{args.sample_id}_viral_aligner_analysis_fields.json"
+    viral_aligner_analysis_table.write_analysis_to_json(result_file=viral_aligner_json_path)  # type: ignore
+
+    logging.info("Viral Aligner Onyx analysis fields written to file %s", viral_aligner_json_path)
+
+    # Save csv files to go to s3:
+    filename = f"{args.sample_id}_filtered_viral_aligner_results.csv"
+    viral_aligner.save_outputs_to_csv(filename=filename, results_dir=args.output_dir)
+    ########
+    # End! #
+    ########
+
+    # Finally, we are finished, just return the exitcode.
+    return main_exitcode
 
 
 # Run
