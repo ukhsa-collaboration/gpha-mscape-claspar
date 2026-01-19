@@ -19,7 +19,7 @@ pd.set_option("display.max_rows", None)
 tp = TaxaPlease()
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def metadata_json():
     with open("tests/test_metadata.json") as json_file:  # noqa: PTH123
         metadata = json.loads(json_file.read())
@@ -27,221 +27,307 @@ def metadata_json():
     return metadata
 
 
-@pytest.fixture
-def kraken_thresholds_dict():
-    return {
-        "READ_THRESHOLD": 10,
-        "GENUS_RANK_THRESHOLD": 3,
-        "GENUS_READ_PCT_THRESHOLD": 20,
-    }
+################
+# Kraken Tests #
+################
 
 
-@pytest.fixture
-def sylph_thresholds_dict():
-    return {"CONTAINMENT_INDEX_THRESHOLD": 0.2, "EFFECTIVE_COVERAGE_THRESHOLD": 1.0}
+class TestKrakenBacteria:
+    @pytest.fixture(autouse=True)
+    def kraken_thresholds_dict(self):
+        self.thresholds = {
+            "READ_THRESHOLD": 10,
+            "GENUS_RANK_THRESHOLD": 3,
+            "GENUS_READ_PCT_THRESHOLD": 20,
+        }
 
+    @pytest.fixture(autouse=True)
+    def test_kraken_data(self, metadata_json):
+        self.test_input_data = pd.DataFrame(metadata_json["classifier_calls"])
 
-@pytest.fixture
-def test_kraken_data(metadata_json):
-    return pd.DataFrame(metadata_json["classifier_calls"])
+    @pytest.fixture(autouse=True)
+    def test_instance_1(self, kraken_thresholds_dict, test_kraken_data):
+        kraken_assignments = bacteria.KrakenBacteria(
+            sample_id="ID-12345678",
+            original_classifier_df=self.test_input_data,
+            kraken_bacteria_thresholds_dict=self.thresholds,  # type: ignore
+            server="mscape",
+        )
+        self.kraken_class_instance = kraken_assignments
 
+    def test_test_class(self):
+        assert (s := self.kraken_class_instance.sample_id) == "ID-12345678", (
+            f"Sanity checking the test class setup failed - expected ID-12345678, got {s}"
+        )
 
-@pytest.fixture
-def sylph_test_data(metadata_json):
-    return pd.DataFrame(metadata_json["sylph_results"])
-
-
-def test_process_collection_date():
-    data = {
-        "id": [1, 2, 3],
-        "collection_date": ["2025-10-10", "", "1992-12-31"],
-        "received_date": ["", "12-12-2025", ""],
-    }
-    df = pd.DataFrame(data)
-    new_df = bacteria._process_collection_date(df)
-    assert new_df.shape == (3, 6), "Actual dataframe does not have expected shape."
-    assert "collection_date_epi_week" in new_df.columns.values, (
-        "Actual dataframe does not contain collection_date_epi_week column."
-    )
-    print(f"Metadata with date handling looks like: {new_df}")
-
-
-@pytest.mark.parametrize(
-    "taxonid,isbacteria,parent_id,parent_name",
-    [
-        (139, True, 64895, "Borreliella"),
-        (1410656, True, 859, "Fusobacterium necrophorum"),
-        (2696357, False, 2788787, "unclassified Caudoviricetes"),
-        (3052230, False, 11102, "Hepacivirus"),
-    ],
-)
-def test__get_parent_taxonomy(taxonid, isbacteria, parent_id, parent_name):
-    actual = bacteria._get_parent_taxonomy(taxonid, tp)
-    assert actual[0] == isbacteria
-    assert actual[1]["taxid"] == parent_id  # type: ignore
-    assert actual[2] == parent_name
-    print(f"Parent taxonomy for {taxonid} is {actual}")
-
-
-@pytest.mark.parametrize(
-    "test,count_descendants,order_in_genus,pct_genus_reads,outcome",
-    [
-        ("Dominant taxa, high count", 100, 1, 80, "high"),
-        ("thresholds", 10, 3, 20, "high"),
-        ("low count, many species in genus", 5, 5, 5, "low"),
-        ("high count, many species in genus", 1000, 1, 10, "low"),
-    ],
-)
-def test__get_kraken_confidence_rating(
-    test,
-    count_descendants,
-    order_in_genus,
-    pct_genus_reads,
-    outcome,
-    kraken_thresholds_dict,
-):
-    actual = bacteria._get_kraken_confidence_rating(
-        count_descendants=count_descendants,
-        order_in_genus=order_in_genus,
-        pct_genus_reads=pct_genus_reads,
-        kraken_thresholds_dict=kraken_thresholds_dict,
-    )
-    assert actual == outcome
-    print(
-        f"\nTesting '{test}' with {count_descendants} reads, {order_in_genus} rank in the genus, "
-        f"{pct_genus_reads} percentage genus reads was given {outcome} confidence rating."
-    )
-
-
-def test_process_kraken(test_kraken_data, kraken_thresholds_dict):
-    actual_species_df, actual_genus_df = bacteria.process_kraken(test_kraken_data, kraken_thresholds_dict, tp)
-    total_species = len(actual_species_df)
-    assert total_species == 80
-
-    high_confidence_species = actual_species_df.loc[actual_species_df["kraken_confidence"] == "high"].shape[0]
-    assert high_confidence_species == 6
-
-    total_genera = len(actual_genus_df)
-    assert total_genera == 56
-
-    genera_with_more_than_one_species = actual_genus_df.loc[actual_genus_df["total_species_identified"] > 1].shape[0]
-    assert genera_with_more_than_one_species == 14
-
-    print(
-        f"\nProcessing kraken results for the test data revealed {total_species} total species, of which "
-        f"{high_confidence_species} were high confidence. There were {total_genera} total genera, of which "
-        f"{genera_with_more_than_one_species} had more than one species in it. (All as expected)"
-    )
-
-
-def test_get_kraken_results(test_kraken_data, kraken_thresholds_dict):
-    headline_result, main_result, all_results = bacteria.get_kraken_results(
-        "ID-123456", test_kraken_data, kraken_thresholds_dict, tp
-    )
-    assert headline_result == "Sample ID-123456 has 6 high confidence bacterial species classified by Kraken."
-    assert len(main_result.keys()) == 6
-    assert all(len(row) == 3 for row in main_result.values())
-    assert len(all_results) == 2  # Expect two dataframes in a list
-    assert len(all_results[1]) == 56  # 56 rows in the genus dataframe using test data.
-
-
-@pytest.fixture
-def sylph_test_data_with_rank(sylph_test_data) -> pd.DataFrame:
-    sylph_test_data["taxon_rank"] = sylph_test_data["taxon_id"].apply(
-        lambda x: tp.get_record(x)["rank"]  # type: ignore
-    )
-    assert all(sylph_test_data["taxon_rank"] == "species")
-    return sylph_test_data
-
-
-def test__process_sylph_rank(sylph_test_data_with_rank):
-    expected_new_columns = pd.DataFrame(
+    @pytest.mark.parametrize(
+        "taxonid,isbacteria,parent_id,parent_name",
         [
-            [1869212, "Chitinophagaceae bacterium"],
-            [520, "Bordetella pertussis"],
-            [2104, "Mycoplasmoides pneumoniae"],
+            (139, True, 64895, "Borreliella"),
+            (1410656, True, 859, "Fusobacterium necrophorum"),
+            (2696357, False, 2788787, "unclassified Caudoviricetes"),
+            (3052230, False, 11102, "Hepacivirus"),
         ],
     )
+    def test__get_parent_taxonomy(self, taxonid, isbacteria, parent_id, parent_name):
+        actual = self.kraken_class_instance._get_parent_taxonomy(taxonid)
+        assert (a := actual[0]) == isbacteria, f"Expected {isbacteria} but got {a}"
+        assert (b := actual[1]["taxid"]) == parent_id, f"Expected {parent_id} but got {b}"
+        assert (c := actual[2]) == parent_name, f"Expected {parent_name}, but got {c}"
+        print(f"\nParent taxonomy dict for {taxonid} is {actual[1]}, all is as expected.")
 
-    actual_new_columns = sylph_test_data_with_rank.apply(
-        lambda x: bacteria._process_sylph_rank(x), axis=1, result_type="expand"
+    @pytest.mark.parametrize(
+        "test,count_descendants,order_in_genus,pct_genus_reads,outcome",
+        [
+            ("Dominant taxa, high count", 100, 1, 80, "high"),
+            ("thresholds", 10, 3, 20, "high"),
+            ("low count, many species in genus", 5, 5, 5, "low"),
+            ("high count, many species in genus", 1000, 1, 10, "low"),
+        ],
     )
-    assert actual_new_columns.equals(expected_new_columns)
-    print(f"\nChecking the sylph rank to get ID and species name - get {actual_new_columns}")
+    def test__get_kraken_confidence_rating(self, test, count_descendants, order_in_genus, pct_genus_reads, outcome):
+        actual = self.kraken_class_instance._get_kraken_confidence_rating(
+            count_descendants=count_descendants, order_in_genus=order_in_genus, pct_genus_reads=pct_genus_reads
+        )
+        assert actual == outcome, f"Expected {outcome}, got {actual}"
+        print(
+            f"\nTesting '{test}' with {count_descendants} reads, {order_in_genus} rank in the genus, "
+            f"{pct_genus_reads} percentage genus reads was given {outcome} confidence rating. All is as expected."
+        )
+
+    def test__process_kraken(self):
+        actual_species_df, actual_genus_df = self.kraken_class_instance._process_kraken()
+        total_species = len(actual_species_df)
+        assert total_species == 80, f"Expected 80, got {total_species}"
+
+        high_confidence_species = actual_species_df.loc[actual_species_df["kraken_confidence"] == "high"].shape[0]
+        assert high_confidence_species == 6, f"Expected 6, got {high_confidence_species}"
+
+        total_genera = len(actual_genus_df)
+        assert total_genera == 56, f"Expected 56, got {total_genera}"
+
+        genera_with_more_than_one_species = actual_genus_df.loc[actual_genus_df["total_species_identified"] > 1].shape[
+            0
+        ]
+        assert genera_with_more_than_one_species == 14, f"Expected 14, got {genera_with_more_than_one_species}"
+
+        print(
+            f"\nProcessing kraken results for the test data revealed {total_species} total species, of which "
+            f"{high_confidence_species} were high confidence. There were {total_genera} total genera, of which "
+            f"{genera_with_more_than_one_species} had more than one species in it. (All as expected)"
+        )
+
+    def test_get_kraken_results(self):
+        headline_result, main_result, species_df, genus_df = self.kraken_class_instance._get_kraken_results()
+        assert "Sample ID-12345678 has 6 high confidence bacterial species classified by Kraken" in headline_result
+        assert (x := len(main_result.keys())) == 6, f"Expected 6, got {x}"
+        assert all(y := (len(row) == 3 for row in main_result.values())), f"Expected Each row to have 3, got {y}"
+        assert (w := species_df.shape[0]) == 80, f"Expected 80, got {w}"
+        assert (z := genus_df.shape[0]) == 56, (
+            f"Expected 56, got {z}"
+        )  # 56 rows in the genus dataframe using test data.
+        print(f'Headline result is: "{headline_result}" - as expected.')
 
 
-def test__process_sylph_rank_strain(sylph_test_data_with_rank):
-    test_df = pd.DataFrame(
-        {"taxon_id": [1121296], "human_readable": ["[Clostridium] aminophilum DSM 10710"], "taxon_rank": ["strain"]}
+class TestNoKrakenBacteria:
+    @pytest.fixture(autouse=True)
+    def kraken_thresholds_dict(self):
+        self.thresholds = {
+            "READ_THRESHOLD": 10,
+            "GENUS_RANK_THRESHOLD": 3,
+            "GENUS_READ_PCT_THRESHOLD": 20,
+        }
+
+    @pytest.fixture(autouse=True)
+    def test_kraken_data(self):
+        self.test_input_data = pd.DataFrame()
+
+    @pytest.fixture(autouse=True)
+    def test_instance_no_data(self, kraken_thresholds_dict, test_kraken_data):
+        kraken_assignments = bacteria.KrakenBacteria(
+            sample_id="ID-00000000",
+            original_classifier_df=self.test_input_data,
+            kraken_bacteria_thresholds_dict=self.thresholds,  # type: ignore
+            server="mscape",
+        )
+        self.kraken_class_instance = kraken_assignments
+
+    def test_test_class(self):
+        assert (s := self.kraken_class_instance.sample_id) == "ID-00000000", (
+            f"Sanity checking the test class setup failed - expected ID-0000000, got {s}"
+        )
+
+    def test__process_kraken(self):
+        species_df, genus_df = self.kraken_class_instance._process_kraken()
+        assert species_df.empty, f"Expected empty species df, got {species_df}"
+        assert genus_df.empty, f"Expected empty genus df, got {genus_df}"
+
+    def test__get_kraken_results(self):
+        headline, result, species_df, genus_df = self.kraken_class_instance._get_kraken_results()
+        assert "Sample ID-00000000 has 0 high confidence bacterial" in headline
+        assert "out of 0 total assignments" in headline
+        assert result == {}, f"Expected empty dict, got {result}"
+        assert species_df.empty, f"Expected empty species df, got {species_df}"
+        assert genus_df.empty, f"Expected empty genus df, got {genus_df}"
+
+
+###############
+# Sylph Tests #
+###############
+
+
+class TestSylphBacteria:
+    @pytest.fixture(autouse=True)
+    def sylph_test_data(self, metadata_json):
+        self.sylph_test_df = pd.DataFrame(metadata_json["sylph_results"])
+
+    @pytest.fixture(autouse=True)
+    def sylph_thresholds_dict(self):
+        self.thresholds = {"CONTAINMENT_INDEX_THRESHOLD": 0.2, "EFFECTIVE_COVERAGE_THRESHOLD": 1.0}
+
+    @pytest.fixture(autouse=True)
+    def sylph_test_data_with_rank(self, sylph_test_data):
+        sylph_test_data = self.sylph_test_df.copy()
+        sylph_test_data["taxon_rank"] = sylph_test_data["taxon_id"].apply(lambda x: tp.get_record(x)["rank"])  # type: ignore
+        assert all(sylph_test_data["taxon_rank"] == "species")
+        self.sylph_df_with_rank = sylph_test_data
+
+    @pytest.fixture(autouse=True)
+    def test_instance_1(self, sylph_test_data, sylph_thresholds_dict):
+        sylph_assignments = bacteria.SylphBacteria(
+            sample_id="ID-12345678",
+            original_sylph_df=self.sylph_test_df,
+            sylph_bacteria_thresholds_dict=self.thresholds,
+            server="mscape",
+        )
+        self.sylph_class_instance = sylph_assignments
+
+    def test_test_class(self):
+        assert (s := self.sylph_class_instance.sample_id) == "ID-12345678", (
+            f"Sanity checking the test class setup failed - expected ID-12345678, got {s}"
+        )
+
+    def test__process_sylph_rank(self):
+        expected_new_columns = pd.DataFrame(
+            [
+                [1869212, "Chitinophagaceae bacterium"],
+                [520, "Bordetella pertussis"],
+                [2104, "Mycoplasmoides pneumoniae"],
+            ],
+        )
+
+        actual_new_columns = self.sylph_df_with_rank.apply(
+            lambda x: self.sylph_class_instance._process_sylph_rank(x), axis=1, result_type="expand"
+        )
+        assert actual_new_columns.equals(expected_new_columns)
+        print(f"\nChecking the sylph rank to get ID and species name - get {actual_new_columns}")
+
+    def test__process_sylph_rank_strain(self):
+        test_df = pd.DataFrame(
+            {"taxon_id": [1121296], "human_readable": ["[Clostridium] aminophilum DSM 10710"], "taxon_rank": ["strain"]}
+        )
+        expected_new_columns = pd.DataFrame([[1526, "[Clostridium] aminophilum"]])
+
+        actual_new_columns = test_df.apply(
+            lambda x: self.sylph_class_instance._process_sylph_rank(x), axis=1, result_type="expand"
+        )
+        assert actual_new_columns.equals(expected_new_columns)
+        print(
+            f"\nTaxa with strain rank will be given the species level ID and human readable:"
+            f"{test_df} would give {expected_new_columns}."
+        )
+
+    def test__process_sylph_rank_no_id(self):
+        test_df = pd.DataFrame({"taxon_id": [""], "human_readable": [""], "taxon_rank": [""]})
+        expected_new_columns = pd.DataFrame([[None, None]])
+
+        actual_new_columns = test_df.apply(
+            lambda x: self.sylph_class_instance._process_sylph_rank(x), axis=1, result_type="expand"
+        )
+        assert actual_new_columns.equals(expected_new_columns)
+        print(
+            f"\nTaxa without a rank will be given the species level ID and human readable:"
+            f"{test_df} would give {expected_new_columns}."
+        )
+
+    @pytest.mark.parametrize(
+        "test,containment_index,effective_coverage,outcome",
+        [
+            ("high containment, high coverage", 1.0, 10.0, "high"),
+            ("thresholds", 0.2, 1.0, "high"),
+            ("low containment, high coverage", 0.05, 0.5, "low"),
+            ("low containment, low coverage", 0.1, 0.04, "low"),
+        ],
     )
-    expected_new_columns = pd.DataFrame([[1526, "[Clostridium] aminophilum"]])
+    def test__get_sylph_confidence_rating(self, test, containment_index, effective_coverage, outcome):
+        actual_outcome = self.sylph_class_instance._get_sylph_confidence_rating(
+            containment_index=containment_index, effective_coverage=effective_coverage
+        )
 
-    actual_new_columns = test_df.apply(lambda x: bacteria._process_sylph_rank(x), axis=1, result_type="expand")
-    assert actual_new_columns.equals(expected_new_columns)
-    print(
-        f"\nTaxa with strain rank will be given the species level ID and human readable:"
-        f"{test_df} would give {expected_new_columns}."
-    )
+        assert actual_outcome == outcome
+        print(
+            f"\nTest '{test}' with containment index {containment_index} and effective coverage {effective_coverage} "
+            f"has confidence rating {outcome} (as expected)."
+        )
 
+    def test_process_sylph(self):
+        actual_sylph_result = self.sylph_class_instance._process_sylph()
+        species_count = actual_sylph_result.loc[actual_sylph_result["taxon_rank"] == "species"].shape[0]
+        assert species_count == 3
+        high_confidence_sylph = actual_sylph_result.loc[actual_sylph_result["sylph_confidence"] == "high"].shape[0]
+        assert high_confidence_sylph == 3
+        count_of_rows_with_genus_ids = actual_sylph_result.loc[actual_sylph_result["genus_id"].notnull()].shape[0]
+        # Genus ID is null if there is no genus for the species, for example if it's unclassified.
+        assert count_of_rows_with_genus_ids == 2
+        print(
+            f"\nProcessing sylph data - there were {len(actual_sylph_result)} sylph results, of which {species_count}"
+            f" were species, and {high_confidence_sylph} had a high confidence. There were "
+            f"{count_of_rows_with_genus_ids} classifications with a genus ID (all as expected)."
+        )
 
-def test__process_sylph_rank_no_id(sylph_test_data_with_rank):
-    test_df = pd.DataFrame({"taxon_id": [""], "human_readable": [""], "taxon_rank": [""]})
-    expected_new_columns = pd.DataFrame([[None, None]])
+    def test__get_sylph_results(self):
+        headline, main_result, full_result_df = self.sylph_class_instance._get_sylph_results()
+        assert (
+            "Sample ID-12345678 has 3 high confidence bacterial (and archaeal) species classified by Sylph" in headline
+        )
+        assert len(main_result.keys()) == 3
+        assert (len(row) == 3 for row in main_result.values())  # 3 rows of 3 columns
+        assert full_result_df.shape == (3, 22)  # full dataframe to be published has 22 columns
+        print(f"\nTest Sylph headline results: {headline} \nand the results:\n {main_result}")
 
-    actual_new_columns = test_df.apply(lambda x: bacteria._process_sylph_rank(x), axis=1, result_type="expand")
-    assert actual_new_columns.equals(expected_new_columns)
-    print(
-        f"\nTaxa without a rank will be given the species level ID and human readable:"
-        f"{test_df} would give {expected_new_columns}."
-    )
-
-
-@pytest.mark.parametrize(
-    "test,containment_index,effective_coverage,outcome",
-    [
-        ("high containment, high coverage", 1.0, 10.0, "high"),
-        ("thresholds", 0.2, 1.0, "high"),
-        ("low containment, high coverage", 0.05, 0.5, "low"),
-        ("low containment, low coverage", 0.1, 0.04, "low"),
-    ],
-)
-def test__get_sylph_confidence_rating(test, containment_index, effective_coverage, outcome, sylph_thresholds_dict):
-    actual_outcome = bacteria._get_sylph_confidence_rating(
-        containment_index=containment_index,
-        effective_coverage=effective_coverage,
-        sylph_thresholds_dict=sylph_thresholds_dict,
-    )
-
-    assert actual_outcome == outcome
-    print(
-        f"\nTest '{test}' with containment index {containment_index} and effective coverage {effective_coverage} "
-        f"has confidence rating {outcome} (as expected)."
-    )
-
-
-def test_process_sylph(sylph_test_data, sylph_thresholds_dict):
-    actual_sylph_result = bacteria.process_sylph(sylph_test_data, sylph_thresholds_dict, tp)
-    species_count = actual_sylph_result.loc[actual_sylph_result["taxon_rank"] == "species"].shape[0]
-    assert species_count == 3
-    high_confidence_sylph = actual_sylph_result.loc[actual_sylph_result["sylph_confidence"] == "high"].shape[0]
-    assert high_confidence_sylph == 3
-    count_of_rows_with_genus_ids = actual_sylph_result.loc[actual_sylph_result["genus_id"].notnull()].shape[0]
-    # Genus ID is null if there is no genus for the species, for example if it's unclassified.
-    assert count_of_rows_with_genus_ids == 2
-    print(
-        f"\nProcessing sylph data - there were {len(actual_sylph_result)} sylph results, of which {species_count} were "
-        f"species, and {high_confidence_sylph} had a high confidence. There were {count_of_rows_with_genus_ids} "
-        f"classifications with a genus ID (all as expected)."
-    )
+    def test_get_sylph_analysis_table(self):
+        analysis_table = self.sylph_class_instance.get_sylph_analysis_table()
+        assert (p := analysis_table.pipeline_name) == "ClasPar", f'Expected pipeline name "ClasPar", got "{p}"'
+        assert (n := analysis_table.name) == "bacteria-classifier-parser", (
+            f'Expected name "bacteria-classifier-parser", got {n}'
+        )
+        assert "sylph" in (d := analysis_table.description), f'Expected "sylph" to be in the descritopn, got {d}'
 
 
-def test_get_sylph_results(sylph_test_data, sylph_thresholds_dict):
-    headline, main_result, full_result_dfs_list = bacteria.get_sylph_results(
-        "ID-123456", sylph_test_data, sylph_thresholds_dict, tp
-    )
-    assert headline == "Sample ID-123456 has 3 high confidence bacterial (and archaeal) species classified by Sylph."
-    assert len(main_result.keys()) == 3
-    assert (len(row) == 3 for row in main_result.values())  # 3 rows of 3 columns
-    assert full_result_dfs_list[0].shape == (3, 22)
-    # full dataframe to be published has 22 columns
-    print(f"\nTest Sylph headline results: {headline} \nand the results:\n {main_result}")
+class TestNoSylphBacteria:
+    @pytest.fixture(autouse=True)
+    def sylph_test_data(self):
+        self.sylph_test_df = pd.DataFrame()
+
+    @pytest.fixture(autouse=True)
+    def sylph_thresholds_dict(self):
+        self.thresholds = {"CONTAINMENT_INDEX_THRESHOLD": 0.2, "EFFECTIVE_COVERAGE_THRESHOLD": 1.0}
+
+    @pytest.fixture(autouse=True)
+    def test_instance_1(self, sylph_test_data, sylph_thresholds_dict):
+        sylph_assignments = bacteria.SylphBacteria(
+            sample_id="ID-00000000",
+            original_sylph_df=self.sylph_test_df,
+            sylph_bacteria_thresholds_dict=self.thresholds,
+            server="mscape",
+        )
+        self.sylph_class_instance = sylph_assignments
+
+    def test_test_class(self):
+        assert (s := self.sylph_class_instance.sample_id) == "ID-00000000", (
+            f"Sanity checking the test class setup failed - expected ID-00000000, got {s}"
+        )
+
+    def test_process_sylph(self):
+        actual_sylph_result = self.sylph_class_instance._process_sylph()
+        assert actual_sylph_result.empty, f"Expected empty dataframe, got {actual_sylph_result}"
