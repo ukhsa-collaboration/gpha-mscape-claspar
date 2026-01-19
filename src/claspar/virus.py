@@ -12,7 +12,18 @@ from claspar import handle_tables
 
 
 class VirusClasPar:
-    """ """
+    """
+    Class for parsing the viral aligner classifications.
+
+    The main methods are:
+    get_virus_analysis_table - get the analysis table (returns instance of the onyx analysis helper class).
+    save_outputs_to_csv - method to save the outputs (saved in instance attributes) to file (returns None)
+
+    :param sample_id: str, climb-id
+    :param original_viral_aligner_df: pandas dataframe, the original results from scylla.
+    :param virus_thresholds_dict: dict, containing the thresholds to filter.
+    :param server: str, mscape or synthscape (database server for Onyx to connect to - will be validated.)
+    """
 
     def __init__(
         self,
@@ -100,6 +111,9 @@ class VirusClasPar:
         if exitcode == 1:
             logging.error("There was an error creating the analysis table. Check the Onyx Analysis Helper.")
             self.exitcode = 1
+
+        # Populate the instance attribute:
+        self.analysis_table: oa.OnyxAnalysis = analysis_table
 
         return analysis_table
 
