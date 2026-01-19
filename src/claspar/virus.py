@@ -2,6 +2,9 @@
 Module for handling the viral aligner outputs. Filters are applied to return the taxa of interest.
 """
 
+import logging
+import os
+
 import pandas as pd
 from onyx_analysis_helper import onyx_analysis_helper_functions as oa
 
@@ -26,50 +29,63 @@ class VirusClasPar:
         self.sample_id: str = sample_id
         self.server: str = server
 
-        self.filtered_data: pd.DataFrame = self._filter_viral_aligner()
+        self.filtered_data: pd.DataFrame
+        self.exitcode: int
+        self.exitcode, self.filtered_data = self._filter_viral_aligner()
 
-        self.headline_results: str = ""
-        self.results: dict = {}
+        self.headline_results: str
+        self.results: dict
         self.headline_results, self.results = self._get_viral_aligner_results()
 
-    def _filter_viral_aligner(self) -> pd.DataFrame:
+    def _filter_viral_aligner(self) -> tuple[int, pd.DataFrame]:
         """
-        Process the viral aligner data by applying the filters.
+        Process the viral aligner data by applying the filters. If the input is empty, return empty dataframe.
 
         :param viral_aligner_df: dataframe of the viral aligner outputs straight from scylla.
         :param thresholds_dict: dictionary of the filters to apply to the dataframe.
-        :return: pandas dataframe with the taxa that pass the filter.
+        :return: tuple of exitcode, filtered df.
+        Filtered df is pandas dataframe with the taxa that pass the filter. (Empty df returned if input is also empty.)
         """
+        # check if empty:
+        if self.data_input.empty:
+            return 0, pd.DataFrame()
         # apply filter
-        filtered_viral_aligner_df = self.data_input.loc[
-            (self.data_input["evenness_value"] >= self.thresholds["EVENNESS_VALUE"])
-            & (self.data_input["coverage_1x"] >= self.thresholds["COVERAGE_1X"])
-            & (self.data_input["uniquely_mapped_reads"] >= self.thresholds["UNIQUELY_MAPPED_READS"])
-            & (self.data_input["mean_read_identity"] >= self.thresholds["MEAN_READ_IDENTITY"])
-            & (self.data_input["mean_alignment_length"] >= self.thresholds["MEAN_ALIGNMENT_LENGTH"])
-        ]
-        return filtered_viral_aligner_df
+        else:
+            try:
+                filtered_viral_aligner_df = self.data_input.loc[
+                    (self.data_input["evenness_value"] >= self.thresholds["EVENNESS_VALUE"])
+                    & (self.data_input["coverage_1x"] >= self.thresholds["COVERAGE_1X"])
+                    & (self.data_input["uniquely_mapped_reads"] >= self.thresholds["UNIQUELY_MAPPED_READS"])
+                    & (self.data_input["mean_read_identity"] >= self.thresholds["MEAN_READ_IDENTITY"])
+                    & (self.data_input["mean_alignment_length"] >= self.thresholds["MEAN_ALIGNMENT_LENGTH"])
+                ]
+                return 0, filtered_viral_aligner_df
+            except KeyError as k:
+                logging.error("The viral alignment data from Scylla is missing expected column:%s", k)
+                return 1, pd.DataFrame()
 
     def _get_viral_aligner_results(self) -> tuple[str, dict]:
         """
         Get the headline result and the results from Sylph.
 
-        :return: tuple; headline_result (str), result (dict), list of tables to write to csv (all pandas
-        dataframes - in this case just one).
+        :return: tuple; headline_result (str), result (dict). If no alignment data, headline_result is string and
+        results is empty dict.
         """
         headline_result = (
             f"Sample {self.sample_id} has {self.filtered_data.shape[0]} viral taxa classified by the Viral Aligner "
-            f"that passed the filters."
+            f"that passed the filters (out of a total of {self.data_input.shape[0]})."
         )
-        results = self.filtered_data[["human_readable", "taxon_id"]].to_dict(orient="index")
+        if self.filtered_data.empty:
+            return headline_result, {}
+        else:
+            results = self.filtered_data[["human_readable", "taxon_id"]].reset_index(drop=True).to_dict(orient="index")
 
         return headline_result, results
 
-    def get_virus_analysis_table(self) -> tuple[oa.OnyxAnalysis, int]:
+    def get_virus_analysis_table(self) -> oa.OnyxAnalysis:
         """
         Pull together all the class attributes into the analysis table.
         """
-        exitcode = 0
 
         analysis_table, exitcode = handle_tables.create_analysis_fields(
             domain="virus",
@@ -80,4 +96,19 @@ class VirusClasPar:
             results=self.results,
             server=self.server,
         )
-        return analysis_table, exitcode
+        # Check the exitcode attribute - it might have broken elsewhere...
+        if exitcode == 1:
+            logging.error("There was an error creating the analysis table. Check the Onyx Analysis Helper.")
+            self.exitcode = 1
+
+        return analysis_table
+
+    def save_outputs_to_csv(self, filename: str, results_dir: str | os.PathLike) -> None:
+        """
+        Save the final results to csv.
+        :param filename: str, name of file to save to.
+        :param results_dir: str or path to directory to save to.
+        """
+        handle_tables.write_df_to_csv(
+            df=self.filtered_data, sample_id=self.sample_id, filename=filename, results_dir=results_dir
+        )
