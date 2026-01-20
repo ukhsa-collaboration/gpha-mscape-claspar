@@ -5,6 +5,7 @@ Module containing functions needed to parse, filter and create bacteria classifi
 ###########
 # Imports #
 import logging
+import os
 
 import pandas as pd
 from taxaplease import TaxaPlease
@@ -25,6 +26,7 @@ class KrakenBacteria:
 
     Atrributes:
     taxaplease - instance of TaxaPlease.
+    exitcode - exitcode, updated after major functions.
     classifier_results - the original classifier outputs from Scylla.
     thresholds - dict; the thresholds to filter on.
     sample_id - str; climb-id
@@ -250,6 +252,22 @@ class KrakenBacteria:
 
         return analysis_table
 
+    def save_outputs_to_csv(self, results_dir: str | os.PathLike) -> None:
+        """
+        Save the final results to csv.
+        :param filename: str, name of file to save to.
+        :param results_dir: str or path to directory to save to.
+        """
+        species_unique_filename = f"{self.sample_id}_kraken_processed_species"
+        handle_tables.write_df_to_csv(
+            df=self.kraken_species_results, filename=species_unique_filename, results_dir=results_dir
+        )
+
+        genus_unique_filename = f"{self.sample_id}_kraken_processed_genera"
+        handle_tables.write_df_to_csv(
+            df=self.kraken_genus_results, filename=genus_unique_filename, results_dir=results_dir
+        )
+
 
 ##########
 # Sylph: #
@@ -264,6 +282,7 @@ class SylphBacteria:
 
     Atrributes:
     taxaplease - instance of TaxaPlease.
+    exitcode - contains exitcode, updated after major functions.
     classifier_results - the original sylph outputs from Scylla.
     thresholds - dict; the thresholds to filter on.
     sample_id - str; climb-id
@@ -430,3 +449,12 @@ class SylphBacteria:
             self.exitcode = exitcode
 
         return analysis_table
+
+    def save_outputs_to_csv(self, results_dir: str | os.PathLike) -> None:
+        """
+        Save the final results to csv.
+        :param filename: str, name of file to save to.
+        :param results_dir: str or path to directory to save to.
+        """
+        filename = f"{self.sample_id}_sylph_processed"
+        handle_tables.write_df_to_csv(df=self.sylph_processed_df, filename=filename, results_dir=results_dir)
