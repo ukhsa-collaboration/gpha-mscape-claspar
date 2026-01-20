@@ -16,13 +16,13 @@ CONFIG = OnyxConfig(
 
 
 @oa.call_to_onyx
-def get_input_data(sample_id: str, server: str) -> list[pd.DataFrame]:
+def get_input_data(sample_id: str, server: str) -> tuple[int, list[pd.DataFrame]]:
     """
     Get the input data from Onyx. Decorated to handle errors suitably.
     :param sample_id: ID of the sample (climb-id).
     :param server: the server to query.
-    :return: list of dataframes, the alignment results, the sylph results and the classifier calls. Note that any of
-    these could be empty dataframes!
+    :return: tuple of exitcode (int) and dataframes (list). List of dataframes consists of the alignment results,
+    the sylph results and the classifier calls. Note that any of these could be empty dataframes!
     """
     with OnyxClient(CONFIG) as client:
         record = client.get(
@@ -31,25 +31,30 @@ def get_input_data(sample_id: str, server: str) -> list[pd.DataFrame]:
             include=["climb_id", "classifier_calls", "alignment_results", "sylph_results"],
         )
 
-    alignment_results_df = pd.DataFrame(record["alignment_results"])
-    sylph_results_df = pd.DataFrame(record["sylph_results"])
-    classifier_calls_df = pd.DataFrame(record["classifier_calls"])
+    try:
+        alignment_results_df = pd.DataFrame(record["alignment_results"])
+        sylph_results_df = pd.DataFrame(record["sylph_results"])
+        classifier_calls_df = pd.DataFrame(record["classifier_calls"])
+        exitcode = 0
+    except KeyError as e:
+        logging.error(f"Could not find key {e} in Onyx Record. Exiting cleanly.")
+        exitcode = 1
 
-    return [alignment_results_df, sylph_results_df, classifier_calls_df]
+    return exitcode, [alignment_results_df, sylph_results_df, classifier_calls_df]
 
 
-def read_samplesheet(path_to_samplesheet: os.PathLike | str) -> list[pd.DataFrame]:
-    """
-    NOT FUNCTIONAL
-    """
-    samplesheet_df = pd.read_csv(path_to_samplesheet, sep="\t")
-    record = samplesheet_df.join(samplesheet_df["record_json"].apply(json.loads).apply(pd.Series))
+# def read_samplesheet(path_to_samplesheet: os.PathLike | str) -> list[pd.DataFrame]:
+#     """
+#     NOT FUNCTIONAL
+#     """
+#     samplesheet_df = pd.read_csv(path_to_samplesheet, sep="\t")
+#     record = samplesheet_df.join(samplesheet_df["record_json"].apply(json.loads).apply(pd.Series))
 
-    alignment_results_df = pd.DataFrame(record["alignment_results"])
-    sylph_results_df = pd.DataFrame(record["sylph_results"])
-    classifier_calls_df = pd.DataFrame(record["classifier_calls"])
+#     alignment_results_df = pd.DataFrame(record["alignment_results"])
+#     sylph_results_df = pd.DataFrame(record["sylph_results"])
+#     classifier_calls_df = pd.DataFrame(record["classifier_calls"])
 
-    return [alignment_results_df, sylph_results_df, classifier_calls_df]
+#     return [alignment_results_df, sylph_results_df, classifier_calls_df]
 
 
 def check_filters(filters: list[str], threshold_dict: dict) -> int:
