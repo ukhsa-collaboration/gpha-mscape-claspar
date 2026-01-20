@@ -60,6 +60,8 @@ class KrakenBacteria:
         """
         self.taxaplease = TaxaPlease()
 
+        self.exitcode = 0
+
         self.classifier_results: pd.DataFrame = original_classifier_df
         self.thresholds: dict = kraken_bacteria_thresholds_dict
         self.sample_id: str = sample_id
@@ -311,6 +313,8 @@ class SylphBacteria:
         On instantiation, populate the thresholds attribute and original dataframe attribute.
         """
         self.taxaplease = TaxaPlease()
+
+        self.exitcode = 0
 
         self.sylph: pd.DataFrame = original_sylph_df
         self.thresholds: dict = sylph_bacteria_thresholds_dict
