@@ -4,7 +4,11 @@ dynamic = ["version"]
 description = "ClasPar: the friendly classifier parser that parses, filters and writes classifier results to analysis tables."
 authors = [{ name = "Jess Friedersdorff", email = "jess.friedersdorff@ukhsa.gov.uk" }]
 requires-python = ">=3.12" # Developed in 3.14.2
-dependencies = ["pandas", "pyyaml", "onyx-analysis-helper@git+https://github.com/ukhsa-collaboration/onyx-analysis-helper.git"]
+dependencies = [
+    "pandas", 
+    "pyyaml", 
+    "onyx-analysis-helper@git+https://github.com/ukhsa-collaboration/onyx-analysis-helper.git",
+    "taxaplease@git+https://github.com/ukhsa-collaboration/gpha-mscape-taxaplease.git"]
 
 [tool.setuptools.dynamic]
 version = { attr = "claspar.__version__" } # Add underscore separated repo name here
