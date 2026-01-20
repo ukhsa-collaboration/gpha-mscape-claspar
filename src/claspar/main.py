@@ -109,7 +109,7 @@ def main():
     threshold_dict = {}
     # Use default filtering thresholds yaml file if custom file is not supplied
     if not args.config:
-        with resources.as_file(resources.files("claspar.lib").joinpath("filter_thresholds.yaml")) as config_file:
+        with resources.as_file(resources.files("claspar.data").joinpath("filter_thresholds.yaml")) as config_file:
             threshold_dict, exit_codes = setup.read_config_file(config_file)
             if any(exit_codes):
                 # logging happens in the function

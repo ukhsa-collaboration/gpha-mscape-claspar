@@ -17,7 +17,7 @@ version = { attr = "claspar.__version__" } # Add underscore separated repo name 
 where = ["src"]
 
 [tool.setuptools.package-data]
-"claspar.lib" = ["*.yaml"]
+"claspar.data" = ["*.yaml"]
 
 [project.optional-dependencies] # Dependencies for developers only - add more if required
 dev = ["ruff>=0.4.10,<0.5", "pytest", "pre-commit"]
