@@ -90,6 +90,10 @@ def main():
     if not args.config:
         with resources.as_file(resources.files("claspar.lib").joinpath("filter_thresholds.yaml")) as config_file:
             threshold_dict, exit_codes = setup.read_config_file(config_file)
+            if any(exit_codes):
+                # logging happens in the function
+                main_exitcode = 1
+                return main_exitcode
 
         logging.info("No custom filtering thresholds yaml file specified, using default parameters from included file.")
     else:
@@ -122,13 +126,75 @@ def main():
     # Bacteria #
     ############
 
+    ##########
+    # Kraken #
+    ##########
+
     # Add in rest of code including logging messages:
-    logging.info("mscape template code beginning")  # Example only - add more informative logging messages
+    logging.info("Parsing the Kraken Bacteria classifications...")
 
-    # Additional code in here
+    # Instantiate the kraken bacterial parser class
+    kraken_bacteria_parser = bacteria.KrakenBacteria(
+        sample_id=args.sample_id,
+        original_classifier_df=classifier_calls_df,
+        kraken_bacteria_thresholds_dict=threshold_dict["kraken_bacterial_filters"],
+        server=args.server,
+    )
 
-    # Write to logs if component finished successfully (or not):
-    logging.info("mscape template code successfully completed")
+    # Get the analysis table:
+    kraken_bacterial_analysis_table = kraken_bacteria_parser.get_kraken_bacteria_analysis_table()
+
+    # Check it's all going smoothly in there:
+    if kraken_bacteria_parser.exitcode == 1:
+        main_exitcode = 1
+        return main_exitcode
+
+    # All good so far, let's write analysis table to json:
+    kraken_bacteria_json_path = Path(args.output) / f"{args.sample_id}_kraken_bacteria_analysis_fields.json"
+    kraken_bacterial_analysis_table.write_analysis_to_json(result_file=kraken_bacteria_json_path)  # type: ignore
+
+    logging.info(
+        "Kraken Bacterial Classifications for Onyx analysis fields written to file %s", kraken_bacteria_json_path
+    )
+
+    # Write files to csv:
+    kraken_bacteria_parser.save_outputs_to_csv(args.output_dir)
+    logging.info("All Kraken bacterial species and genera data written to csv in %s", args.output_dir)
+    logging.info("Finished parsing Kraken Bacterial results.")
+
+    #########
+    # Sylph #
+    #########
+
+    # Add in rest of code including logging messages:
+    logging.info("Parsing the Sylph classifications...")
+
+    # Instantiate the kraken bacterial parser class
+    sylph_parser = bacteria.SylphBacteria(
+        sample_id=args.sample_id,
+        original_sylph_df=sylph_input_df,
+        sylph_bacteria_thresholds_dict=threshold_dict["sylph_filters"],
+        server=args.server,
+    )
+
+    # Get the analysis table:
+    sylph_analysis_table = sylph_parser.get_sylph_analysis_table()
+
+    # Check it's all going smoothly in there:
+    if sylph_parser.exitcode == 1:
+        main_exitcode = 1
+        return main_exitcode
+
+    # All good so far, let's write analysis table to json:
+    sylph_json_path = Path(args.output) / f"{args.sample_id}_sylph_analysis_fields.json"
+    sylph_analysis_table.write_analysis_to_json(result_file=sylph_json_path)  # type: ignore
+
+    logging.info("Viral Aligner Onyx analysis fields written to file %s", kraken_bacteria_json_path)
+
+    # Write files to csv:
+    kraken_bacteria_parser.save_outputs_to_csv(args.output_dir)
+    logging.info("All Kraken bacterial species and genera data written to csv in %s", args.output_dir)
+    logging.info("Finished parsing Kraken Bacterial results.")
 
     ###########
     # Viruses #
@@ -158,8 +224,9 @@ def main():
     logging.info("Viral Aligner Onyx analysis fields written to file %s", viral_aligner_json_path)
 
     # Save csv files to go to s3:
-    filename = f"{args.sample_id}_filtered_viral_aligner_results.csv"
-    viral_aligner.save_outputs_to_csv(filename=filename, results_dir=args.output_dir)
+    viral_aligner.save_outputs_to_csv(results_dir=args.output_dir)
+    logging.info("Viral Aligner filtered data written to csv in %s", args.output_dir)
+    logging.info("Finished parsing Viral Aligner results.")
     ########
     # End! #
     ########
