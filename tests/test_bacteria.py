@@ -72,7 +72,7 @@ class TestKrakenBacteria:
     def test__get_parent_taxonomy(self, taxonid, isbacteria, parent_id, parent_name):
         actual = self.kraken_class_instance._get_parent_taxonomy(taxonid)
         assert (a := actual[0]) == isbacteria, f"Expected {isbacteria} but got {a}"
-        assert (b := actual[1]["taxid"]) == parent_id, f"Expected {parent_id} but got {b}"
+        assert (b := actual[1]["taxid"]) == parent_id, f"Expected {parent_id} but got {b}"  # type: ignore
         assert (c := actual[2]) == parent_name, f"Expected {parent_name}, but got {c}"
         print(f"\nParent taxonomy dict for {taxonid} is {actual[1]}, all is as expected.")
 
@@ -128,6 +128,17 @@ class TestKrakenBacteria:
         )  # 56 rows in the genus dataframe using test data.
         print(f'Headline result is: "{headline_result}" - as expected.')
 
+    def test_save_outputs_to_csv(self, tmp_path):
+        self.kraken_class_instance.save_outputs_to_csv(tmp_path)
+        print(f"Saving to {tmp_path}")
+
+    def test_write_to_json(self, tmp_path):
+        self.kraken_class_instance.get_kraken_bacteria_analysis_table()
+
+        filename = tmp_path / f"{self.kraken_class_instance.sample_id}_kraken_bacteria_analysis_fields.json"
+        self.kraken_class_instance.analysis_table.write_analysis_to_json(filename)  # type: ignore
+        print(f"Saving json to {filename}")
+
 
 class TestNoKrakenBacteria:
     @pytest.fixture(autouse=True)
@@ -169,6 +180,17 @@ class TestNoKrakenBacteria:
         assert result == {}, f"Expected empty dict, got {result}"
         assert species_df.empty, f"Expected empty species df, got {species_df}"
         assert genus_df.empty, f"Expected empty genus df, got {genus_df}"
+
+    def test_save_outputs_to_csv(self, tmp_path):
+        self.kraken_class_instance.save_outputs_to_csv(tmp_path)
+        print(f"Saving to {tmp_path}")
+
+    def test_write_to_json(self, tmp_path):
+        self.kraken_class_instance.get_kraken_bacteria_analysis_table()
+
+        filename = tmp_path / f"{self.kraken_class_instance.sample_id}_kraken_bacteria_analysis_fields.json"
+        self.kraken_class_instance.analysis_table.write_analysis_to_json(filename)  # type: ignore
+        print(f"Saving json to {filename}")
 
 
 ###############
@@ -303,6 +325,17 @@ class TestSylphBacteria:
         )
         assert "sylph" in (d := analysis_table.description), f'Expected "sylph" to be in the descritopn, got {d}'
 
+    def test_save_outputs_to_csv(self, tmp_path):
+        self.sylph_class_instance.save_outputs_to_csv(tmp_path)
+        print(f"Saving to {tmp_path}")
+
+    def test_write_to_json(self, tmp_path):
+        self.sylph_class_instance.get_sylph_analysis_table()
+
+        filename = tmp_path / f"{self.sylph_class_instance.sample_id}_sylph_analysis_fields.json"
+        self.sylph_class_instance.analysis_table.write_analysis_to_json(filename)  # type: ignore
+        print(f"Saving json to {filename}")
+
 
 class TestNoSylphBacteria:
     @pytest.fixture(autouse=True)
@@ -331,3 +364,14 @@ class TestNoSylphBacteria:
     def test_process_sylph(self):
         actual_sylph_result = self.sylph_class_instance._process_sylph()
         assert actual_sylph_result.empty, f"Expected empty dataframe, got {actual_sylph_result}"
+
+    def test_save_outputs_to_csv(self, tmp_path):
+        self.sylph_class_instance.save_outputs_to_csv(tmp_path)
+        print(f"Saving to {tmp_path}")
+
+    def test_write_to_json(self, tmp_path):
+        self.sylph_class_instance.get_sylph_analysis_table()
+
+        filename = tmp_path / f"{self.sylph_class_instance.sample_id}_sylph_analysis_fields.json"
+        self.sylph_class_instance.analysis_table.write_analysis_to_json(filename)  # type: ignore
+        print(f"Saving json to {filename}")
