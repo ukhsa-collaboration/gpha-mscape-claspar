@@ -100,7 +100,9 @@ def main():
     args = get_args()  # noqa: F841
 
     # Set up log file:
-    log_file = Path(args.log_file) if args.log_file else Path(args.output_dir) / f"{args.input}_{today}_claspar_log.txt"
+    log_file = (
+        Path(args.log_file) if args.log_file else Path(args.output_dir) / f"{args.sample_id}_{today}_claspar_log.txt"
+    )
     set_up_logger(log_file)
 
     # Set up thresholds:
@@ -186,7 +188,7 @@ def main():
         return main_exitcode
 
     # All good so far, let's write analysis table to json:
-    kraken_bacteria_json_path = Path(args.output) / f"{args.sample_id}_kraken_bacteria_analysis_fields.json"
+    kraken_bacteria_json_path = Path(args.output_dir) / f"{args.sample_id}_kraken_bacteria_analysis_fields.json"
     kraken_bacterial_analysis_table.write_analysis_to_json(result_file=kraken_bacteria_json_path)  # type: ignore
 
     logging.info(
@@ -222,7 +224,7 @@ def main():
         return main_exitcode
 
     # All good so far, let's write analysis table to json:
-    sylph_json_path = Path(args.output) / f"{args.sample_id}_sylph_analysis_fields.json"
+    sylph_json_path = Path(args.output_dir) / f"{args.sample_id}_sylph_analysis_fields.json"
     sylph_analysis_table.write_analysis_to_json(result_file=sylph_json_path)  # type: ignore
 
     logging.info("Sylph Bacterial Classifications for Onyx analysis fields written to file %s", sylph_json_path)
