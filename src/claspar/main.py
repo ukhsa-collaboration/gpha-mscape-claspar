@@ -9,24 +9,36 @@ and example helper functions provided below. These can be amended as required.
 import argparse
 import logging
 import sys
+from datetime import datetime
 from importlib import resources
 from pathlib import Path
 
 from claspar import bacteria, setup, virus
+
+today = datetime.today().strftime("%Y-%m-%d-%H%M")
 
 
 # Arg parse setup
 def get_args():
     parser = argparse.ArgumentParser(
         prog="claspar",
-        description="""ClasPar: the friendly classifier parser that parses, filters and writes classifier results to 
-        analysis tables.""",
+        description="""
+        ClasPar: the friendly classifier parser that parses, filters and writes classifier results to analysis tables.
+        """,
     )
-    parser.add_argument("--sample_id", "-i", type=str, required=True, help="Sample ID")
-    parser.add_argument("--output_dir", "-o", type=str, required=True, help="directory to save results to.")
+    parser.add_argument("--sample_id", "-i", dest="sample_id", type=str, required=True, help="Climb-ID for sample.")
+    parser.add_argument(
+        "--output_dir",
+        "-o",
+        dest="output_dir",
+        type=str,
+        required=True,
+        help="Path to directory where results will be saved to.",
+    )
     parser.add_argument(
         "--config",
         "-c",
+        dest="config",
         type=str,
         required=False,
         help="Path to yaml file with filtering thresholds",
@@ -34,24 +46,31 @@ def get_args():
     parser.add_argument(
         "--server",
         "-s",
+        dest="server",
         type=str,
         required=True,
         choices=["mscape", "synthscape"],
         help="Specify server code is being run on - helpful if developing on synthscape and running on mscape",
     )
     parser.add_argument(
-        "--dry-run",
-        "-d",
+        "--log-file",
+        "-l",
+        dest="log_file",
+        type=str,
         required=False,
-        action="store_true",
-        help="Use this option if code includes a step that writes to onyx so that it can be tested",
+        help=(
+            """
+            Path to log file. Default will be a file called '/sample-id/_claspar_/date-time/.log' in the output directory 
+            (where sample_id is the climb-id for the sample and /date-time/ is the date and time of running).
+            """
+        ),
     )
 
     return parser.parse_args()
 
 
 # Logger set up
-def set_up_logger(stdout_file):
+def set_up_logger(log_filepath):
     """Example logger set up which can be amended as required. In this example,
     all logging messages go to a stdout log file, and error messages also go to
     stderr log. If the component runs correctly, stderr is empty. The logger is
@@ -61,7 +80,7 @@ def set_up_logger(stdout_file):
     logger.setLevel(logging.DEBUG)
     formatter = logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s")
 
-    out_handler = logging.FileHandler(stdout_file, mode="a")
+    out_handler = logging.FileHandler(log_filepath, mode="a")
     out_handler.setFormatter(formatter)
     logger.addHandler(out_handler)
 
@@ -81,7 +100,7 @@ def main():
     args = get_args()  # noqa: F841
 
     # Set up log file:
-    log_file = Path(args.output) / f"{args.input}_claspar_log.txt"
+    log_file = Path(args.log_file) if args.log_file else Path(args.output_dir) / f"{args.input}_{today}_claspar_log.txt"
     set_up_logger(log_file)
 
     # Set up thresholds:
@@ -92,12 +111,14 @@ def main():
             threshold_dict, exit_codes = setup.read_config_file(config_file)
             if any(exit_codes):
                 # logging happens in the function
+                # --> Exit if any issues with the config:
                 main_exitcode = 1
                 return main_exitcode
 
         logging.info("No custom filtering thresholds yaml file specified, using default parameters from included file.")
+
     else:
-        logging.info("Reading filtering thresholds from custom yaml file provided: %s", args.config)
+        logging.info("Reading the filtering thresholds from custom yaml file provided: %s", args.config)
 
         # Read in filtering thresholds from yaml file
         try:
@@ -116,7 +137,22 @@ def main():
             return main_exitcode
 
     # Set up data needed (query Onyx once here)
-    viral_aligner_input_df, sylph_input_df, classifier_calls_df = setup.get_input_data(args.sample_id, args.server)
+    onyx_exitcode, dataframes = setup.get_input_data(args.sample_id, args.server)
+
+    if onyx_exitcode == 1:
+        # --> Exit if issues with Onyx:
+        logging.error("Exiting due to issues with Onyx.")
+        main_exitcode = 1
+        return main_exitcode
+
+    # Unpack dataframes into variables:
+    try:
+        viral_aligner_input_df, sylph_input_df, classifier_calls_df = dataframes
+    except ValueError as e:
+        # --> Exit if cannot unpack dataframes:
+        logging.error("Cannot unpack the dataframes into the variables: %s", e)
+        main_exitcode = 1
+        return main_exitcode
 
     ####################
     # The Actual Thing #
@@ -159,7 +195,7 @@ def main():
 
     # Write files to csv:
     kraken_bacteria_parser.save_outputs_to_csv(args.output_dir)
-    logging.info("All Kraken bacterial species and genera data written to csv in %s", args.output_dir)
+    logging.info("All Processed Kraken bacterial species and genera data written to csv in %s", args.output_dir)
     logging.info("Finished parsing Kraken Bacterial results.")
 
     #########
@@ -189,12 +225,13 @@ def main():
     sylph_json_path = Path(args.output) / f"{args.sample_id}_sylph_analysis_fields.json"
     sylph_analysis_table.write_analysis_to_json(result_file=sylph_json_path)  # type: ignore
 
-    logging.info("Viral Aligner Onyx analysis fields written to file %s", kraken_bacteria_json_path)
+    logging.info("Sylph Bacterial Classifications for Onyx analysis fields written to file %s", sylph_json_path)
 
     # Write files to csv:
-    kraken_bacteria_parser.save_outputs_to_csv(args.output_dir)
-    logging.info("All Kraken bacterial species and genera data written to csv in %s", args.output_dir)
-    logging.info("Finished parsing Kraken Bacterial results.")
+    sylph_parser.save_outputs_to_csv(args.output_dir)
+    logging.info("All processed Sylph data written to csv in %s", args.output_dir)
+
+    logging.info("Finished parsing Sylph results.")
 
     ###########
     # Viruses #
@@ -218,7 +255,7 @@ def main():
         return main_exitcode
 
     # All good so far, let's write analysis table to json:
-    viral_aligner_json_path = Path(args.output) / f"{args.sample_id}_viral_aligner_analysis_fields.json"
+    viral_aligner_json_path = Path(args.output_dir) / f"{args.sample_id}_viral_aligner_analysis_fields.json"
     viral_aligner_analysis_table.write_analysis_to_json(result_file=viral_aligner_json_path)  # type: ignore
 
     logging.info("Viral Aligner Onyx analysis fields written to file %s", viral_aligner_json_path)
@@ -227,6 +264,7 @@ def main():
     viral_aligner.save_outputs_to_csv(results_dir=args.output_dir)
     logging.info("Viral Aligner filtered data written to csv in %s", args.output_dir)
     logging.info("Finished parsing Viral Aligner results.")
+
     ########
     # End! #
     ########
