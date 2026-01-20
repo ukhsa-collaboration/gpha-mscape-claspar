@@ -112,7 +112,7 @@ class VirusClasPar:
 
         analysis_table, exitcode = handle_tables.create_analysis_fields(
             domain="virus",
-            classifier="viral_aligner",
+            classifier="viral aligner",
             record_id=self.sample_id,
             thresholds=self.thresholds,
             headline_result=self.headline_results,
@@ -129,12 +129,11 @@ class VirusClasPar:
 
         return analysis_table
 
-    def save_outputs_to_csv(self, filename: str, results_dir: str | os.PathLike) -> None:
+    def save_outputs_to_csv(self, results_dir: str | os.PathLike) -> None:
         """
         Save the final results to csv.
         :param filename: str, name of file to save to.
         :param results_dir: str or path to directory to save to.
         """
-        handle_tables.write_df_to_csv(
-            df=self.filtered_data, sample_id=self.sample_id, filename=filename, results_dir=results_dir
-        )
+        unique_filename = f"{self.sample_id}_filtered_viral_aligner_results"
+        handle_tables.write_df_to_csv(df=self.filtered_data, filename=unique_filename, results_dir=results_dir)
