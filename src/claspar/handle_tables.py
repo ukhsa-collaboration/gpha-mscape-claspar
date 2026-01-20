@@ -61,16 +61,16 @@ def create_analysis_fields(
     return onyx_analysis, exitcode
 
 
-def write_df_to_csv(*, df: pd.DataFrame, sample_id: str, filename: str, results_dir: str | os.PathLike) -> os.PathLike:
+def write_df_to_csv(*, df: pd.DataFrame, filename: str, results_dir: str | os.PathLike) -> os.PathLike:
     """
     Write results dataframe to csv.
-    :param df: dataframe of results to save
-    :param sample_id: Sample ID to use in file name
-    :param filename: str, unique name of file (will be joined to f"{sample_id}_{filename}.csv")
-    :param results_dir: Directory to save results to
-    :returns: os.path of saved csv file
+    :param df: dataframe of results to save.
+    :param filename: str, unique name of file WITHOUT extension. (csv gets added).
+    :param results_dir: Directory to save results to.
+    :returns: os.path of saved csv file.
     """
-    result_file_path = Path(results_dir) / f"{sample_id}_{filename}.csv"
+
+    result_file_path = Path(results_dir) / f"{filename}.csv"
 
     df.to_csv(result_file_path)
 
