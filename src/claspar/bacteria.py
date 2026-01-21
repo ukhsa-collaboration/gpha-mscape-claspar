@@ -389,7 +389,9 @@ class SylphBacteria:
         if sylph_df.empty:
             return pd.DataFrame()
 
-        sylph_df["taxon_rank"] = sylph_df["taxon_id"].apply(lambda x: tp.get_record(x)["rank"])  # type: ignore
+        sylph_df["taxon_rank"] = sylph_df["taxon_id"].apply(
+            lambda x: rec["rank"] if (rec := tp.get_record(x)) is not None else "Unknown"
+        )
 
         sylph_df[["species_id", "species_human_readable"]] = sylph_df.apply(
             lambda x: self._process_sylph_rank(x), axis=1, result_type="expand"
