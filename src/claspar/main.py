@@ -33,7 +33,7 @@ def get_args():
         dest="output_dir",
         type=str,
         required=True,
-        help="Path to directory where results will be saved to.",
+        help="Path to directory where results will be saved to. Directory will be created if it does not exist.",
     )
     parser.add_argument(
         "--config",
@@ -41,7 +41,7 @@ def get_args():
         dest="config",
         type=str,
         required=False,
-        help="Path to yaml file with filtering thresholds",
+        help="Optional - Path to yaml file with filtering thresholds",
     )
     parser.add_argument(
         "--server",
@@ -53,6 +53,14 @@ def get_args():
         help="Specify server code is being run on - helpful if developing on synthscape and running on mscape",
     )
     parser.add_argument(
+        "--samplesheet",
+        "-t",
+        dest="samplesheet_path",
+        type=str,
+        required=False,
+        help="Optional - Path to samplesheet. Must be tsv, should have header 'full_Onyx_json' or 2 columns, 1 row.",
+    )
+    parser.add_argument(
         "--log-file",
         "-l",
         dest="log_file",
@@ -60,8 +68,9 @@ def get_args():
         required=False,
         help=(
             """
-            Path to log file. Default will be a file called '/sample-id/_claspar_/date-time/.log' in the output directory 
-            (where sample_id is the climb-id for the sample and /date-time/ is the date and time of running).
+            Optional - Path to log file. Default will be a file called '/sample-id/_claspar_/date-time/.log' in the 
+            output directory (where sample_id is the climb-id for the sample and /date-time/ is the date and time of 
+            running).
             """
         ),
     )
@@ -99,6 +108,9 @@ def main():
     # Retrieve command line arguments:
     args = get_args()  # noqa: F841
 
+    # Set up output dir:
+    setup.setup_outdir(args.output_dir)
+
     # Set up log file:
     log_file = (
         Path(args.log_file) if args.log_file else Path(args.output_dir) / f"{args.sample_id}_{today}_claspar_log.txt"
@@ -120,7 +132,7 @@ def main():
         logging.info("No custom filtering thresholds yaml file specified, using default parameters from included file.")
 
     else:
-        logging.info("Reading the filtering thresholds from custom yaml file provided: %s", args.config)
+        logging.info("Reading the filtering thresholds from custom yaml file provided: %s" % (args.config))  # noqa
 
         # Read in filtering thresholds from yaml file
         try:
@@ -134,25 +146,34 @@ def main():
                 return main_exitcode
         # --> Exit if config file not found:
         except FileNotFoundError:
-            logging.error("Specified filtering thresholds yaml file %s not found, exiting program.", args.config)
+            logging.error("Specified filtering thresholds yaml file %s not found, exiting program." % (args.config))  # noqa
             main_exitcode = 1
             return main_exitcode
 
-    # Set up data needed (query Onyx once here)
-    onyx_exitcode, dataframes = setup.get_input_data(args.sample_id, args.server)
+    # Set up data here - samplesheet or onyx:
+    if args.samplesheet_path:
+        samplesheet_exitcode, dataframes = setup.read_samplesheet(args.samplesheet_path)
+        if samplesheet_exitcode == 1:
+            # --> Exit if issues with samplesheet parsing:
+            logging.error("Cannot parse samplesheet provided, exiting.")
+            main_exitcode = 1
+            return main_exitcode
 
-    if onyx_exitcode == 1:
-        # --> Exit if issues with Onyx:
-        logging.error("Exiting due to issues with Onyx.")
-        main_exitcode = 1
-        return main_exitcode
+    else:
+        # Set up data needed (query Onyx once here)
+        onyx_exitcode, dataframes = setup.get_input_data(args.sample_id, args.server)
+        if onyx_exitcode == 1:
+            # --> Exit if issues with Onyx:
+            logging.error("Exiting due to issues with Onyx.")
+            main_exitcode = 1
+            return main_exitcode
 
     # Unpack dataframes into variables:
     try:
         viral_aligner_input_df, sylph_input_df, classifier_calls_df = dataframes
     except ValueError as e:
         # --> Exit if cannot unpack dataframes:
-        logging.error("Cannot unpack the dataframes into the variables: %s", e)
+        logging.error("Cannot unpack the dataframes into the variables: %s" % (e))  # noqa
         main_exitcode = 1
         return main_exitcode
 
@@ -192,12 +213,12 @@ def main():
     kraken_bacterial_analysis_table.write_analysis_to_json(result_file=kraken_bacteria_json_path)  # type: ignore
 
     logging.info(
-        "Kraken Bacterial Classifications for Onyx analysis fields written to file %s", kraken_bacteria_json_path
+        "Kraken Bacterial Classifications for Onyx analysis fields written to file %s" % (kraken_bacteria_json_path)  # noqa
     )
 
     # Write files to csv:
     kraken_bacteria_parser.save_outputs_to_csv(args.output_dir)
-    logging.info("All Processed Kraken bacterial species and genera data written to csv in %s", args.output_dir)
+    logging.info("All Processed Kraken bacterial species and genera data written to csv in %s" % (args.output_dir))  # noqa
     logging.info("Finished parsing Kraken Bacterial results.")
 
     #########
@@ -227,11 +248,11 @@ def main():
     sylph_json_path = Path(args.output_dir) / f"{args.sample_id}_sylph_analysis_fields.json"
     sylph_analysis_table.write_analysis_to_json(result_file=sylph_json_path)  # type: ignore
 
-    logging.info("Sylph Bacterial Classifications for Onyx analysis fields written to file %s", sylph_json_path)
+    logging.info("Sylph Bacterial Classifications for Onyx analysis fields written to file %s" % (sylph_json_path))  # noqa
 
     # Write files to csv:
     sylph_parser.save_outputs_to_csv(args.output_dir)
-    logging.info("All processed Sylph data written to csv in %s", args.output_dir)
+    logging.info("All processed Sylph data written to csv in %s" % (args.output_dir))  # noqa
 
     logging.info("Finished parsing Sylph results.")
 
@@ -264,7 +285,7 @@ def main():
 
     # Save csv files to go to s3:
     viral_aligner.save_outputs_to_csv(results_dir=args.output_dir)
-    logging.info("Viral Aligner filtered data written to csv in %s", args.output_dir)
+    logging.info("Viral Aligner filtered data written to csv in %s" % (args.output_dir))  # noqa
     logging.info("Finished parsing Viral Aligner results.")
 
     ########

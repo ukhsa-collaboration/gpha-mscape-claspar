@@ -332,10 +332,11 @@ class SylphBacteria:
         Get the species taxon ID and the species name from row, using taxaplease.
 
         :params row: pd.series, row of a dataframe (used with an apply).
-        :return: list of two; taxon ID and human-readable species name, or [None, None] if rank is not species or strain.
+        :return: list of two; taxon ID and human-readable species name, or [None, None] if rank is not species or
+        strain.
         """
         if row["taxon_id"] is None:
-            logging.error(f"Taxon id is not found for {row}")
+            logging.error("Taxon id is not found for %s" % (row))  # noqa
             return None, None
 
         if row["taxon_rank"] == "species":
@@ -349,7 +350,9 @@ class SylphBacteria:
             else:
                 return None, None
         else:
-            print(f"Taxon ID returned rank other than species or strain: {row['taxon_id'], row['taxon_rank']}")
+            logging.info(
+                "Taxon ID returned rank other than species or strain: %s, %s" % (row["taxon_id"], row["taxon_rank"])  # noqa
+            )
             return None, None
 
     def _get_sylph_confidence_rating(
@@ -386,7 +389,9 @@ class SylphBacteria:
         if sylph_df.empty:
             return pd.DataFrame()
 
-        sylph_df["taxon_rank"] = sylph_df["taxon_id"].apply(lambda x: tp.get_record(x)["rank"])  # type: ignore
+        sylph_df["taxon_rank"] = sylph_df["taxon_id"].apply(
+            lambda x: rec["rank"] if (rec := tp.get_record(x)) is not None else "Unknown"
+        )
 
         sylph_df[["species_id", "species_human_readable"]] = sylph_df.apply(
             lambda x: self._process_sylph_rank(x), axis=1, result_type="expand"

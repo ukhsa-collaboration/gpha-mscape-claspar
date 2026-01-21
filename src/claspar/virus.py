@@ -84,7 +84,7 @@ class VirusClasPar:
                 ]
                 return 0, filtered_viral_aligner_df
             except KeyError as k:
-                logging.error("The viral alignment data from Scylla is missing expected column:%s", k)
+                logging.error("The viral alignment data from Scylla is missing expected column:%s" % (k))  # noqa
                 return 1, pd.DataFrame()
 
     def _get_viral_aligner_results(self) -> tuple[str, dict]:
