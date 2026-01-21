@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from pathlib import Path
@@ -36,24 +37,57 @@ def get_input_data(sample_id: str, server: str) -> tuple[int, list[pd.DataFrame]
         classifier_calls_df = pd.DataFrame(record["classifier_calls"])
         exitcode = 0
     except KeyError as e:
-        logging.error(f"Could not find key {e} in Onyx Record. Exiting cleanly.")
+        logging.error("Could not find key %s in Onyx Record. Exiting cleanly." % (e))  # noqa
         exitcode = 1
 
     return exitcode, [alignment_results_df, sylph_results_df, classifier_calls_df]
 
 
-# def read_samplesheet(path_to_samplesheet: os.PathLike | str) -> list[pd.DataFrame]:
-#     """
-#     NOT FUNCTIONAL
-#     """
-#     samplesheet_df = pd.read_csv(path_to_samplesheet, sep="\t")
-#     record = samplesheet_df.join(samplesheet_df["record_json"].apply(json.loads).apply(pd.Series))
+def read_samplesheet(path_to_samplesheet: os.PathLike | str) -> tuple[int, list[pd.DataFrame]]:
+    """
+    Read in tab seperated samplesheet and return three dataframes. Must be 2x2 dataframe with 'full_Onyx_json' header
+    that contains the onyx record as json.
 
-#     alignment_results_df = pd.DataFrame(record["alignment_results"])
-#     sylph_results_df = pd.DataFrame(record["sylph_results"])
-#     classifier_calls_df = pd.DataFrame(record["classifier_calls"])
+    :param path_to_samplesheet: path to the samplesheet to be read in, must be tab seperated.
+    :return: list of three, [alignment_results_df, sylph_results_df, classifier_calls_df]
+    """
+    exitcode = 0
+    samplesheet_df = pd.read_csv(path_to_samplesheet, sep="\t")
+    try:
+        json_str = samplesheet_df["full_Onyx_json"].iloc[0]
+    except KeyError as k:
+        logging.debug("Expected column %s not found in the samplesheet, will try using index..." % (k))  # noqa
+        try:
+            json_str = samplesheet_df.loc[0, :].values[1]
+        except IndexError as i:
+            logging.error(
+                """
+                Cannot parse the json from the sample sheet, dataframe has %s row and %s columns. 
+                Expected 1 row, 2 columns. Expected columns "climb_id" and "full_Onyx_json". %s 
+                """  # noqa
+                % (samplesheet_df.shape[0], samplesheet_df.shape[1], i)  # noqa
+            )
 
-#     return [alignment_results_df, sylph_results_df, classifier_calls_df]
+            exitcode = 1
+            empty_dfs = [pd.DataFrame() for _ in range(3)]  # Make three empty dataframes to return
+            return exitcode, empty_dfs
+
+    # Try to parse the json:
+    try:
+        record = json.loads(json_str)
+    except TypeError as t:
+        logging.error("Cannot parse the json from the sample sheet. Expected json, got %s. %s" % (json_str, t))  # noqa
+        exitcode = 1
+        empty_dfs = [pd.DataFrame() for _ in range(3)]  # Make three empty dataframes to return
+        return exitcode, empty_dfs
+
+    alignment_results_df = pd.DataFrame(record["alignment_results"])
+    sylph_results_df = pd.DataFrame(record["sylph_results"])
+    classifier_calls_df = pd.DataFrame(record["classifier_calls"])
+
+    dfs = [alignment_results_df, sylph_results_df, classifier_calls_df]
+
+    return exitcode, dfs
 
 
 def check_filters(filters: list[str], threshold_dict: dict) -> int:
@@ -69,12 +103,12 @@ def check_filters(filters: list[str], threshold_dict: dict) -> int:
     # First check for filters in the threshold dict compared to expected (extras)
     for f1 in threshold_dict:
         if f1 not in filters:
-            logging.info("Filter '%s' is not set to be used.", f1)
+            logging.info("Filter '%s' is not set to be used." % (f1))  # noqa
 
     # Second check for filters not in the threshold dict that are expected (missing)
     for f2 in filters:
         if f2 not in threshold_dict:
-            logging.error("Filter %s has not been provided and is required. Exiting.", f2)
+            logging.error("Filter %s has not been provided and is required. Exiting." % (f2))  # noqa
             exitcode = 1
     return exitcode
 
