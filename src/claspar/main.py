@@ -108,6 +108,9 @@ def main():
     # Retrieve command line arguments:
     args = get_args()  # noqa: F841
 
+    # Set up output dir:
+    setup.setup_outdir(args.output_dir)
+
     # Set up log file:
     log_file = (
         Path(args.log_file) if args.log_file else Path(args.output_dir) / f"{args.sample_id}_{today}_claspar_log.txt"

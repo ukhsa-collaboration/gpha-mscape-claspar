@@ -147,3 +147,16 @@ def read_config_file(config_file: str | os.PathLike) -> tuple[dict, list]:
     ]
     exit_codes.append(check_filters(expected_viral_aligner_filters, thresholds["viral_aligner_filters"]))
     return thresholds, exit_codes
+
+
+def setup_outdir(outdir: str | os.PathLike) -> None:
+    """
+    Handle the output directory, using either the default or commandline arg. Create dir
+    if needed.
+    :param outdir: the outdir argument from commandline.
+    :return: None.
+    """
+    outdir_path = Path(outdir)
+    outdir_path.mkdir(parents=True, exist_ok=True)
+
+    return None
