@@ -33,7 +33,7 @@ def get_args():
         dest="output_dir",
         type=str,
         required=True,
-        help="Path to directory where results will be saved to.",
+        help="Path to directory where results will be saved to. Directory will be created if it does not exist.",
     )
     parser.add_argument(
         "--config",

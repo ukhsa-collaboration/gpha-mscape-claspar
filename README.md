@@ -49,15 +49,25 @@ On the commandline, once installed, run:
 ```
 claspar --sample_id <ID> --output_dir <DIR> --server mscape
 ```
-Where `ID` is a valid sample ID and `DIR` is a valid output directory. 
+Where `ID` is a valid sample ID and `DIR` is a valid output directory. This method includes an Onyx call, and therefore 
+requires all the necessary credentials and connectivity. 
+
+However, it is possible to run ClasPar with a samplesheet (in 2x2 format, tab-seperated, with the columns 'climb-id' and 
+'full_Onyx_json'):
+
+```
+claspar --sample_id <ID> --output_dir <DIR> --server mscape --samplesheet <TSV FILE>
+```
+***NOTE**: sample ID is still required.*
 
 ## 📃 Inputs: 📃
 | Argument | Required | Description |
 | -------- | ------- | ------- |
 | --sample_id, -s | Yes | Climb-ID for sample |
-| --output_dir, -o | Yes |  Path to directory where results will be saved to.  |
+| --output_dir, -o | Yes |  Path to directory where results will be saved to. The directory is made if it doesn't exist already. |
 | --config, -c | No |  Path to yaml file with filtering thresholds. Default can be seen in src/claspar/data/filter_thresholds.yaml |
 | --server, -s | Yes  | Must be one of: [mscape, synthscape]. Specify server code is being run on - helpful if developing on synthscape and running on mscape |
+| --samplesheet, -t | No | Path to samplesheet. Must be tsv, should have header 'full_Onyx_json' or 2 columns, 1 row. |
 | --log-file, -l | No | Path to log file. Default will be a file called '/sample-id/_claspar_/date-time/.log' in the output directory (where sample_id is the climb-id for the sample and /date-time/ is the date and time of running). |
 
 ## 📤 Outputs: 📤
