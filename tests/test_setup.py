@@ -2,8 +2,6 @@ import logging
 from importlib import resources
 
 import pandas as pd
-import pytest
-
 from claspar import setup
 
 pd.set_option("display.max_colwidth", None)

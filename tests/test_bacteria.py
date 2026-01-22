@@ -7,9 +7,8 @@ import json
 
 import pandas as pd
 import pytest  # noqa: F401
-from taxaplease import TaxaPlease
-
 from claspar import bacteria
+from taxaplease import TaxaPlease
 
 pd.set_option("display.max_colwidth", None)
 pd.set_option("display.max_columns", None)

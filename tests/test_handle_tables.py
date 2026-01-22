@@ -1,5 +1,6 @@
-from claspar import handle_tables
 from datetime import datetime
+
+from claspar import handle_tables
 
 
 def test_create_bacterial_analysis_fields():
