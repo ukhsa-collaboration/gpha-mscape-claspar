@@ -72,7 +72,6 @@ def write_df_to_csv(*, df: pd.DataFrame, filename: str, results_dir: str | os.Pa
 
     result_file_path = Path(results_dir) / f"{filename}.csv"
 
-# Change function in handle_tables.py line 75 to not save index to csv.
     df.to_csv(result_file_path, index=False)
 
     return result_file_path
