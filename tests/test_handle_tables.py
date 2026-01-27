@@ -1,5 +1,6 @@
-from claspar import handle_tables
 from datetime import datetime
+
+from claspar import __version__, handle_tables
 
 
 def test_create_bacterial_analysis_fields():
@@ -10,7 +11,7 @@ def test_create_bacterial_analysis_fields():
         "description": "This is an analysis to parse and filter the bacteria classifications from sylph",
         "analysis_date": today,
         "pipeline_name": "ClasPar",
-        "pipeline_version": "1.0.0",
+        "pipeline_version": __version__,
         "pipeline_url": "https://github.com/ukhsa-collaboration/gpha-mscape-claspar",
         "methods": '{"stuff": 1}',
         "result": "Found some stuff here.",
