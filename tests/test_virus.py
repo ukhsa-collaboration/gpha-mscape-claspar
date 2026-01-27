@@ -2,7 +2,6 @@ import json
 
 import pandas as pd
 import pytest
-
 from claspar import virus
 
 
@@ -40,9 +39,9 @@ class TestViralParser:
         )
 
     def test_test_class(self):
-        assert (s := self.test_class_instance.sample_id) == "ID-12345678", (
-            f"Sanity checking the test class setup failed - expected ID-12345678, got {s}"
-        )
+        assert (
+            s := self.test_class_instance.sample_id
+        ) == "ID-12345678", f"Sanity checking the test class setup failed - expected ID-12345678, got {s}"
 
     def test_filter_viral_aligner(self):
         ec, filtered_df = self.test_class_instance._filter_viral_aligner()
@@ -52,22 +51,22 @@ class TestViralParser:
 
     def test_get_viral_aligner_results(self):
         headline, results = self.test_class_instance._get_viral_aligner_results()
-        assert (s := "Sample ID-12345678 has 2 viral taxa classified") in headline, (
-            f"Expected {s} in headline, got {headline}"
-        )
+        assert (
+            s := "Sample ID-12345678 has 2 viral taxa classified"
+        ) in headline, f"Expected {s} in headline, got {headline}"
         assert (x := len(results.keys())) == 2, f"Expected 2 keys in the results dict, got {x}"
-        assert results[0]["human_readable"] == "rhinovirus A1", (
-            "Something has changed about how the results dictionary is made."
-        )
+        assert (
+            results[0]["human_readable"] == "rhinovirus A1"
+        ), "Something has changed about how the results dictionary is made."
         print(f"\nHeadline is: '{headline}'\n and results are: {results}")
 
     def test_get_virus_analysis_table(self):
         analysis_table = self.test_class_instance.get_virus_analysis_table()
         assert (e := self.test_class_instance.exitcode) == 0, f"Expected exitcode of 0, got {e}"
         assert (p := analysis_table.pipeline_name) == "ClasPar", f'Expected pipeline name "ClasPar", got "{p}"'
-        assert (n := analysis_table.name) == "virus-classifier-parser", (
-            f'Expected name "virus-classifier-parser", got {n}'
-        )
+        assert (
+            n := analysis_table.name
+        ) == "virus-classifier-parser", f'Expected name "virus-classifier-parser", got {n}'
         print(f"Resulting analysis table is formatted correctly: {analysis_table}")
 
     def test_save_outputs_to_csv(self, tmp_path):
@@ -158,14 +157,14 @@ class TestBrokenInput:
         )
 
     def test_test_class(self):
-        assert (s := self.test_broken_data_instance.sample_id) == "ID-9999999", (
-            f"Sanity checking the test class setup failed - expected ID-9999999, got {s}"
-        )
+        assert (
+            s := self.test_broken_data_instance.sample_id
+        ) == "ID-9999999", f"Sanity checking the test class setup failed - expected ID-9999999, got {s}"
 
     def test_nothing_breaks_if_missing_column(self):
-        assert (e := self.test_broken_data_instance.exitcode) == 1, (
-            f"Expected exitcode to be 1 for broken input data, got {e}"
-        )
+        assert (
+            e := self.test_broken_data_instance.exitcode
+        ) == 1, f"Expected exitcode to be 1 for broken input data, got {e}"
         assert (r := self.test_broken_data_instance.results) == {}, f"Expected empty results dict, got {r}"
         self.test_broken_data_instance.get_virus_analysis_table()
         ec = self.test_broken_data_instance.exitcode
