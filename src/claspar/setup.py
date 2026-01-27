@@ -26,9 +26,9 @@ def get_input_data(sample_id: str, server: str) -> tuple[int, list[pd.DataFrame]
     """
     with OnyxClient(CONFIG) as client:
         record = client.get(
-            project="mscape",
-            climb_id="C-0125714289",
-            include=["climb_id", "classifier_calls", "alignment_results", "sylph_results"],
+            project=server,
+            climb_id=sample_id,
+            include=["classifier_calls", "alignment_results", "sylph_results"],
         )
 
     try:
