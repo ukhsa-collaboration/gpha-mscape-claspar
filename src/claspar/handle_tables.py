@@ -72,6 +72,6 @@ def write_df_to_csv(*, df: pd.DataFrame, filename: str, results_dir: str | os.Pa
 
     result_file_path = Path(results_dir) / f"{filename}.csv"
 
-    df.to_csv(result_file_path)
+    df.to_csv(result_file_path, index=False)
 
     return result_file_path
