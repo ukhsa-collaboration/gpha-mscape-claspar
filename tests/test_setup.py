@@ -2,8 +2,6 @@ import logging
 from importlib import resources
 
 import pandas as pd
-import pytest
-
 from claspar import setup
 
 pd.set_option("display.max_colwidth", None)
@@ -50,7 +48,7 @@ def test_check_filters_missing_filter(caplog):
 def test_parse_samplesheet():
     path_to_samplesheet = "tests/test_samplesheet.tsv"
 
-    exit_code, dfs = setup.read_samplesheet(path_to_samplesheet)
+    dfs, exit_code = setup.read_samplesheet(path_to_samplesheet)
     virus, sylph, kraken = dfs
     assert exit_code == 0
     assert (a := virus.shape[0]) == 35, f"Expected 35, got {a}"
@@ -66,10 +64,10 @@ def test_broken_samplesheet(tmp_path, caplog):
     broken_samplesheet.to_csv(broken_samplesheet_path, index=False, sep="\t")
 
     with caplog.at_level(logging.DEBUG):
-        exitcode, dfs = setup.read_samplesheet(broken_samplesheet_path)
-        assert (s := "Expected column 'full_Onyx_json' not found in the samplesheet") in caplog.text, (
-            f"Expected error message {s} but got {caplog.text}"
-        )
+        dfs, exitcode = setup.read_samplesheet(broken_samplesheet_path)
+        assert (
+            s := "Expected column 'full_Onyx_json' not found in the samplesheet"
+        ) in caplog.text, f"Expected error message {s} but got {caplog.text}"
         virus, sylph, kraken = dfs
         assert exitcode == 0, f"Expected exitcode 0, got {exitcode}"
         assert (a := virus.shape[0]) == 35, f"Expected 35, got {a}"
@@ -86,7 +84,7 @@ def test_one_column_samplesheet(tmp_path, caplog):
     broken_samplesheet_2.to_csv(broken_samplesheet_2_path, index=False, sep="\t")
 
     with caplog.at_level(logging.ERROR):
-        exitcode, dfs = setup.read_samplesheet(broken_samplesheet_2_path)
+        dfs, exitcode = setup.read_samplesheet(broken_samplesheet_2_path)
         assert exitcode == 1, f"Expected exitcode 1, got {exitcode}"
         assert (
             lm := "Cannot parse the json from the sample sheet, dataframe has 1 row and 1 columns"
