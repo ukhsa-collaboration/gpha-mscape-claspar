@@ -152,7 +152,7 @@ def main():
 
     # Set up data here - samplesheet or onyx:
     if args.samplesheet_path:
-        samplesheet_exitcode, dataframes = setup.read_samplesheet(args.samplesheet_path)
+        dataframes, samplesheet_exitcode = setup.read_samplesheet(args.samplesheet_path)
         if samplesheet_exitcode == 1:
             # --> Exit if issues with samplesheet parsing:
             logging.error("Cannot parse samplesheet provided, exiting.")
@@ -161,7 +161,7 @@ def main():
 
     else:
         # Set up data needed (query Onyx once here)
-        onyx_exitcode, dataframes = setup.get_input_data(args.sample_id, args.server)
+        dataframes, onyx_exitcode = setup.get_input_data(args.sample_id, args.server)
         if onyx_exitcode == 1:
             # --> Exit if issues with Onyx:
             logging.error("Exiting due to issues with Onyx.")

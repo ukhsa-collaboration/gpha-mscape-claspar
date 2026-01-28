@@ -16,13 +16,12 @@ CONFIG = OnyxConfig(
 
 
 @oa.call_to_onyx
-def get_input_data(sample_id: str, server: str) -> tuple[int, list[pd.DataFrame]]:
+def get_input_data(sample_id: str, server: str) -> tuple[list[pd.DataFrame], int]:
     """
     Get the input data from Onyx. Decorated to handle errors suitably.
     :param sample_id: ID of the sample (climb-id).
     :param server: the server to query.
-    :return: tuple of exitcode (int) and dataframes (list). List of dataframes consists of the alignment results,
-    the sylph results and the classifier calls. Note that any of these could be empty dataframes!
+    :return: tuple of dataframes (list) and exitcode (int).
     """
     with OnyxClient(CONFIG) as client:
         record = client.get(
@@ -40,16 +39,17 @@ def get_input_data(sample_id: str, server: str) -> tuple[int, list[pd.DataFrame]
         logging.error("Could not find key %s in Onyx Record. Exiting cleanly." % (e))  # noqa
         exitcode = 1
 
-    return exitcode, [alignment_results_df, sylph_results_df, classifier_calls_df]
+    return [alignment_results_df, sylph_results_df, classifier_calls_df], exitcode
 
 
-def read_samplesheet(path_to_samplesheet: os.PathLike | str) -> tuple[int, list[pd.DataFrame]]:
+def read_samplesheet(path_to_samplesheet: os.PathLike | str) -> tuple[list[pd.DataFrame], int]:
     """
     Read in tab seperated samplesheet and return three dataframes. Must be 2x2 dataframe with 'full_Onyx_json' header
     that contains the onyx record as json.
 
     :param path_to_samplesheet: path to the samplesheet to be read in, must be tab seperated.
-    :return: list of three, [alignment_results_df, sylph_results_df, classifier_calls_df]
+    :return: tuple of dataframes (list) and exitcode (int). List of dataframes consists of the alignment results,
+    the sylph results and the classifier calls. Note that any of these could be empty dataframes!
     """
     exitcode = 0
     samplesheet_df = pd.read_csv(path_to_samplesheet, sep="\t")
@@ -70,7 +70,7 @@ def read_samplesheet(path_to_samplesheet: os.PathLike | str) -> tuple[int, list[
 
             exitcode = 1
             empty_dfs = [pd.DataFrame() for _ in range(3)]  # Make three empty dataframes to return
-            return exitcode, empty_dfs
+            return empty_dfs, exitcode
 
     # Try to parse the json:
     try:
@@ -79,7 +79,7 @@ def read_samplesheet(path_to_samplesheet: os.PathLike | str) -> tuple[int, list[
         logging.error("Cannot parse the json from the sample sheet. Expected json, got %s. %s" % (json_str, t))  # noqa
         exitcode = 1
         empty_dfs = [pd.DataFrame() for _ in range(3)]  # Make three empty dataframes to return
-        return exitcode, empty_dfs
+        return empty_dfs, exitcode
 
     alignment_results_df = pd.DataFrame(record["alignment_results"])
     sylph_results_df = pd.DataFrame(record["sylph_results"])
@@ -87,7 +87,7 @@ def read_samplesheet(path_to_samplesheet: os.PathLike | str) -> tuple[int, list[
 
     dfs = [alignment_results_df, sylph_results_df, classifier_calls_df]
 
-    return exitcode, dfs
+    return dfs, exitcode
 
 
 def check_filters(filters: list[str], threshold_dict: dict) -> int:
